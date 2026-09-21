@@ -1,0 +1,10 @@
+[Unit]
+Description=e-Paper weather dashboard
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ej
+WorkingDirectory=/home/ej/epaper
+ExecStart=/usr/bin/python3 /home/ej/epaper/dashboard.py
