@@ -16,71 +16,71 @@ File History :
 # Table of contents
 - [Table of contents](#table-of-contents)
 - [Test Environment](#test-environment)
-- [0. 專案簡介 Overview](#0-專案簡介-overview)
-- [1. 硬體 Hardware](#1-硬體-hardware)
-  - [1.1. 面板規格 Panel specification](#11-面板規格-panel-specification)
-  - [1.2. 接線 Wiring](#12-接線-wiring)
-- [2. 系統設定 Raspberry Pi setup](#2-系統設定-raspberry-pi-setup)
-- [3. 安裝本專案 Install this project](#3-安裝本專案-install-this-project)
-- [4. 設定 Configuration](#4-設定-configuration)
-- [5. 使用方式 Usage](#5-使用方式-usage)
-- [6. 顏色校正 Color calibration](#6-顏色校正-color-calibration)
-- [7. 開機與每小時自動更新 Auto update with systemd](#7-開機與每小時自動更新-auto-update-with-systemd)
-- [8. 運作原理 How it works](#8-運作原理-how-it-works)
-- [9. 成果 Result](#9-成果-result)
-- [10. 注意事項 Precautions](#10-注意事項-precautions)
-- [11. 疑難排解 Troubleshooting](#11-疑難排解-troubleshooting)
-- [12. 更換面板 Porting to another panel](#12-更換面板-porting-to-another-panel)
-- [13. 參考資料 References](#13-參考資料-references)
+- [0. Overview](#0-overview)
+- [1. Hardware](#1-hardware)
+  - [1.1. Panel specification](#11-panel-specification)
+  - [1.2. Wiring](#12-wiring)
+- [2. Raspberry Pi setup](#2-raspberry-pi-setup)
+- [3. Install this project](#3-install-this-project)
+- [4. Configuration](#4-configuration)
+- [5. Usage](#5-usage)
+- [6. Color calibration](#6-color-calibration)
+- [7. Auto update with systemd](#7-auto-update-with-systemd)
+- [8. How it works](#8-how-it-works)
+- [9. Result](#9-result)
+- [10. Precautions](#10-precautions)
+- [11. Troubleshooting](#11-troubleshooting)
+- [12. Porting to another panel](#12-porting-to-another-panel)
+- [13. References](#13-references)
 
 # Test Environment
 
 | Item        | Version / Model                                   | Comments                                   |
 | ----------- | ------------------------------------------------- | ------------------------------------------ |
-| Board       | Raspberry Pi 3 Model B V1.2                       | 3B / 3B+ 同樣適用                           |
+| Board       | Raspberry Pi 3 Model B V1.2                       | Also works on 3B / 3B+                     |
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero      | 皆由 apt 安裝                               |
-| Font        | fonts-noto-cjk                                    | 中文字型                                    |
-| Weather API | [Open-Meteo](https://open-meteo.com/)             | 免 API key                                 |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero      | All installed via apt                      |
+| Font        | fonts-noto-cjk                                    | CJK font                                   |
+| Weather API | [Open-Meteo](https://open-meteo.com/)             | No API key required                        |
 
-# 0. 專案簡介 Overview
+# 0. Overview
 
-把 Waveshare 7.3 吋 Spectra 6 六色電子紙接上 Raspberry Pi 3，做成一個「照片 + 天氣」的電子相框：
+Connect a Waveshare 7.3" Spectra 6 six-color e-Paper display to a Raspberry Pi 3 to build a "photo + weather" digital photo frame:
 
-- 背景是自己的照片，每天自動換一張（或指定某一張）
-- 照片上疊加目前溫度、體感、濕度、風速、降雨機率與未來四天預報
-- 開機連上網路後更新一次，之後每小時整點更新
-- 沒網路就不刷新；但超過 20 小時沒刷新會用快取資料強制刷一次（面板規格要求 24 小時內至少刷一次）
-- 畫面內容沒變（只差時間戳）就跳過刷新，減少閃爍與面板耗損
+- The background is your own photo, changed automatically once a day (or a specific one can be pinned)
+- Current temperature, feels-like, humidity, wind speed, chance of rain, and a 4-day forecast are overlaid on the photo
+- Updates once when the network comes up at boot, then on the hour every hour thereafter
+- No refresh happens without network access; but if no refresh has occurred for over 20 hours, it force-refreshes with cached data (the panel spec requires at least one refresh within 24 hours)
+- If the rendered content is unchanged (aside from the timestamp), the refresh is skipped to reduce flicker and panel wear
 
-三支腳本：
+Three scripts:
 
-| Script            | 用途                                                             |
-| ----------------- | ---------------------------------------------------------------- |
-| `epaper_photo.py` | 影像處理 pipeline（色域壓縮 + dither）、面板設定、單張照片顯示、顏色校正 |
-| `dashboard.py`    | 天氣看板主程式：抓天氣、疊加文字圖示、刷新面板                         |
-| `recover.py`      | 面板診斷（全黑測試）與殘影救援（黑白 / 六色交替全刷）                   |
+| Script            | Purpose                                                                     |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `epaper_photo.py` | Image processing pipeline (gamut compression + dither), panel setup, single-photo display, color calibration |
+| `dashboard.py`    | Main weather dashboard program: fetches weather, overlays text/icons, refreshes the panel |
+| `recover.py`      | Panel diagnostics (all-black test) and ghosting recovery (alternating black/white or six-color full refresh) |
 
-# 1. 硬體 Hardware
+# 1. Hardware
 
-### 1.1. 面板規格 Panel specification
+### 1.1. Panel specification
 
 | Item                 | Spec                                   |
-| -------------------- | -------------------------------------- |
+| -------------------- | --------------------------------------- |
 | Resolution           | 800 × 480                              |
 | Display area         | 160.0 mm × 96.0 mm                     |
-| Dot pitch            | 0.2 mm（約 127 ppi）                    |
-| Colors               | E6：黑、白、黃、紅、藍、綠                |
-| Full refresh time    | 約 25 s（刷新過程會閃爍，屬正常現象）       |
+| Dot pitch            | 0.2 mm (approx. 127 ppi)               |
+| Colors               | E6: black, white, yellow, red, blue, green |
+| Full refresh time    | Approx. 25 s (flickering during refresh is normal) |
 | Interface            | SPI (mode 0)                           |
 | Operating voltage    | 3.3 V / 5 V                            |
-| Operating temp.      | 0 ~ 50 ℃                               |
+| Operating temp.      | 0 ~ 50 °C                              |
 
-### 1.2. 接線 Wiring
+### 1.2. Wiring
 
-驅動板可以直接插在 Pi 的 40PIN 排針上，或用附的 8PIN 線連接。用 8PIN 線時對照下表：
+The driver board can be plugged directly onto the Pi's 40-pin header, or connected with the included 8-pin cable. When using the 8-pin cable, refer to the table below:
 
 | e-Paper | BCM   | Board pin |
 | :-----: | :---: | :-------: |
@@ -93,50 +93,50 @@ File History :
 | RST     | 17    | 11        |
 | BUSY    | 24    | 18        |
 
-> Raspberry Pi pinout（來源：Waveshare Wiki）
+> Raspberry Pi pinout (source: Waveshare Wiki)
 >
 > ![pinout](img/pinout.png)
 
-> 實際接線：8PIN 線連接 7.3inch e-Paper HAT (E) 與 Raspberry Pi 3 Model B
+> Actual wiring: 8-pin cable connecting the 7.3inch e-Paper HAT (E) to a Raspberry Pi 3 Model B
 >
 > ![wiring](img/wiring.jpg)
 
-接線要點：
+Wiring notes:
 
-- 驅動板上的 **SPI Select 開關撥到 `0`（4-line SPI）**
-- 8PIN 延長線不要超過 20 cm，太長可能造成資料遺失、畫面偏移
-- 面板的 FPC 排線很脆弱：**只能沿螢幕水平方向彎**，不要垂直折、不要往螢幕正面折、不要反覆彎。FPC 連接器是 0.5 mm pitch 後掀式，插拔前先把壓條掀起，完全斷電再操作
+- Set the driver board's **SPI Select switch to `0` (4-line SPI)**
+- Keep the 8-pin extension cable under 20 cm; longer cables can cause data loss or a shifted image
+- The panel's FPC cable is fragile: **only bend it horizontally along the screen**, never fold it vertically or toward the front of the screen, and avoid repeated bending. The FPC connector is a 0.5 mm pitch flip-back type — lift the retaining flap before inserting or removing it, and always disconnect power completely first
 
-# 2. 系統設定 Raspberry Pi setup
+# 2. Raspberry Pi setup
 
-**Step 1. 開啟 SPI**
+**Step 1. Enable SPI**
 
 ```shell
 $ sudo raspi-config
 # Interface Options -> SPI -> Yes
 $ sudo reboot
-$ ls /dev/spi*        # 應看到 /dev/spidev0.0 /dev/spidev0.1
+$ ls /dev/spi*        # should show /dev/spidev0.0 /dev/spidev0.1
 ```
 
-**Step 2. 安裝套件**
+**Step 2. Install packages**
 
 ```shell
 $ sudo apt update
 $ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk
 ```
 
-**Step 3. 使用者群組（不需要 sudo 執行）**
+**Step 3. User groups (run without sudo)**
 
-一般使用者只要在 `spi`、`gpio` 群組就能驅動面板。本專案的腳本**一律不要用 sudo 執行**（見 [11. 疑難排解](#11-疑難排解-troubleshooting)）。
+A regular user only needs to be in the `spi` and `gpio` groups to drive the panel. Scripts in this project should **never be run with sudo** (see [11. Troubleshooting](#11-troubleshooting)).
 
 ```shell
-$ id                                  # 確認有 spi、gpio
-$ sudo usermod -aG spi,gpio $USER     # 若沒有，加入後重新登入
+$ id                                  # confirm spi and gpio are listed
+$ sudo usermod -aG spi,gpio $USER     # if not, add them and re-login
 ```
 
-**Step 4. 下載 Waveshare 官方驅動並先跑官方範例**
+**Step 4. Download the official Waveshare driver and run the official example first**
 
-先確認硬體與接線沒問題，再跑本專案：
+Confirm the hardware and wiring work before running this project:
 
 ```shell
 $ mkdir -p ~/workspace && cd ~/workspace
@@ -145,11 +145,11 @@ $ cd e-Paper/RaspberryPi_JetsonNano/python/examples
 $ python3 epd_7in3e_test.py
 ```
 
-官方範例能正常顯示六色圖形與範例圖片，才進行下一步。
+Only move on to the next step once the official example displays the six-color pattern and sample image correctly.
 
-# 3. 安裝本專案 Install this project
+# 3. Install this project
 
-目錄結構：
+Directory layout:
 
 ```
 ~/epaper/
@@ -157,109 +157,109 @@ $ python3 epd_7in3e_test.py
 ├── dashboard.py
 ├── recover.py
 ├── lib -> ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib   (symlink)
-├── bg/                      # 背景照片，放 jpg / png / bmp
+├── bg/                      # background photos, jpg / png / bmp
 ├── systemd/
 │   ├── epaper-dash.service
 │   └── epaper-dash.timer
-└── img/                     # README 用圖
+└── img/                     # images used in this README
 ```
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# 放入三支 .py 與 systemd/
+# copy in the three .py scripts and systemd/
 
-# 把 Waveshare 的 python lib 接進來（注意是 python/lib 這層，不是 waveshare_epd）
+# link in Waveshare's python lib (note: the python/lib level, not waveshare_epd itself)
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
-$ ls ~/epaper/lib/waveshare_epd/epd7in3e.py      # 能列出檔案才代表連結正確
+$ ls ~/epaper/lib/waveshare_epd/epd7in3e.py      # file listed = link is correct
 
-# 放幾張背景照片
+# add a few background photos
 $ cp ~/Pictures/*.jpg ~/epaper/bg/
 ```
 
-> 如果 `~/epaper/lib` 已經是一個存在的目錄，`ln -s` 會在裡面建出 `lib/lib`，import 仍然失敗。先 `rm` 掉再建。
+> If `~/epaper/lib` already exists as a directory, `ln -s` will create `lib/lib` inside it and imports will still fail. Remove it first, then re-create the symlink.
 
-# 4. 設定 Configuration
+# 4. Configuration
 
-**`epaper_photo.py`：面板與影像處理**
+**`epaper_photo.py`: panel and image processing**
 
-| 參數             | 預設                | 說明                                                   |
-| ---------------- | ------------------- | ------------------------------------------------------ |
-| `DRIVER`         | `"epd7in3e"`        | Waveshare 驅動模組名稱                                  |
-| `W, H`           | `800, 480`          | 面板解析度                                              |
-| `PALETTE_SRGB`   | 估計值               | 面板實測六原色，**務必校正**（見第 6 節）                   |
-| `EXPOSURE`       | `1.25`              | >1 提亮中間調；照片偏暗就往上調                             |
-| `SATURATION`     | `1.25`              | 飽和度預補償（dither 會讓顏色變淡）                         |
-| `LOCAL_AMOUNT`   | `0.55`              | 局部對比（unsharp），0 關閉                                |
+| Parameter        | Default             | Description                                               |
+| ---------------- | ------------------- | ----------------------------------------------------------- |
+| `DRIVER`         | `"epd7in3e"`        | Waveshare driver module name                                |
+| `W, H`           | `800, 480`          | Panel resolution                                             |
+| `PALETTE_SRGB`   | estimated            | Measured primary colors of the panel, **must be calibrated** (see section 6) |
+| `EXPOSURE`       | `1.25`              | >1 brightens midtones; increase if photos look too dark      |
+| `SATURATION`     | `1.25`              | Saturation pre-compensation (dithering tends to wash colors out) |
+| `LOCAL_AMOUNT`   | `0.55`              | Local contrast (unsharp), 0 to disable                        |
 
-**`dashboard.py`：看板內容與刷新策略**
+**`dashboard.py`: dashboard content and refresh policy**
 
-| 參數              | 預設                    | 說明                                             |
-| ----------------- | ----------------------- | ------------------------------------------------ |
-| `LAT, LON`        | `24.8138, 120.9675`     | 天氣查詢座標                                       |
-| `PLACE`           | `"新竹"`                | 畫面上顯示的地名                                    |
-| `TZ`              | `"Asia/Taipei"`         | 時區                                              |
-| `SCRIM`           | `0.0`                   | 背景壓暗程度。0 = 照片原樣；文字靠黑色描邊維持可讀性       |
-| `SCRIM_BANDS`     | `False`                 | 額外壓暗上下兩條 UI 區域                             |
-| `MIN_INTERVAL`    | `180`                   | 最短刷新間隔（秒），面板規格要求                        |
-| `MAX_AGE`         | `20 * 3600`             | 超過此時間沒刷新就強制刷新（面板規格要求 < 24 h）         |
+| Parameter          | Default                  | Description                                          |
+| ----------------- | ------------------------ | ------------------------------------------------------ |
+| `LAT, LON`        | `24.8138, 120.9675`      | Coordinates used for the weather query                 |
+| `PLACE`           | `"Hsinchu"`               | Place name shown on screen                              |
+| `TZ`              | `"Asia/Taipei"`           | Timezone                                                |
+| `SCRIM`           | `0.0`                     | Background darkening amount. 0 = photo as-is; readability is maintained via black text outlines |
+| `SCRIM_BANDS`     | `False`                   | Additionally darken the top and bottom UI bands          |
+| `MIN_INTERVAL`    | `180`                     | Minimum refresh interval (seconds), required by the panel spec |
+| `MAX_AGE`         | `20 * 3600`               | Force a refresh once this long has passed without one (panel spec requires < 24 h) |
 
-# 5. 使用方式 Usage
+# 5. Usage
 
-> 所有指令都以一般使用者執行，**不加 sudo**。
+> All commands below are run as a regular user, **without sudo**.
 
-**天氣看板 `dashboard.py`**
+**Weather dashboard `dashboard.py`**
 
 ```shell
 $ cd ~/epaper
-$ python3 dashboard.py                              # 正常更新（受刷新保護規則約束）
-$ python3 dashboard.py --force                      # 略過所有保護規則，立即刷新
-$ python3 dashboard.py --bg bg/a.jpg --force        # 指定背景照片（不走每日輪替）
-$ python3 dashboard.py --preview /tmp/p.png         # 只輸出 PNG，不碰面板
+$ python3 dashboard.py                              # normal update (subject to refresh-protection rules)
+$ python3 dashboard.py --force                      # skip all protection rules, refresh immediately
+$ python3 dashboard.py --bg bg/a.jpg --force        # use a specific background photo (bypasses daily rotation)
+$ python3 dashboard.py --preview /tmp/p.png         # only output a PNG, does not touch the panel
 ```
 
-> ⚠️ `--preview` 的參數是**輸出**路徑。不要寫成 `bg/` 裡的來源檔，程式會拒絕寫入 `bg/`。
+> ⚠️ The argument to `--preview` is an **output** path. Do not point it at a source file inside `bg/` — the program refuses to write into `bg/`.
 
-**單張照片 `epaper_photo.py`（不疊加天氣）**
+**Single photo `epaper_photo.py` (no weather overlay)**
 
 ```shell
 $ python3 epaper_photo.py bg/a.jpg
 $ python3 epaper_photo.py bg/a.jpg --preview /tmp/p.png
 ```
 
-這支沒有 UI 遮擋，是調 `EXPOSURE`、驗證顏色校正最乾淨的工具。
+Since there's no UI overlay, this is the cleanest tool for tuning `EXPOSURE` and verifying color calibration.
 
-**面板診斷與救援 `recover.py`**
+**Panel diagnostics and recovery `recover.py`**
 
 ```shell
-$ python3 recover.py --black       # 全黑一次，用來判斷條紋是殘影還是硬體損傷
-$ python3 recover.py               # 黑白交替 8 輪（約 1 小時，每次間隔 185 s）
-$ python3 recover.py --colours     # 先刷紅綠藍黃再黑白交替（效果較強）
+$ python3 recover.py --black       # single all-black pass, used to tell ghosting from physical panel damage
+$ python3 recover.py               # 8 rounds of alternating black/white (~1 hour, 185 s between passes)
+$ python3 recover.py --colours     # flashes red/green/blue/yellow first, then alternating black/white (stronger effect)
 ```
 
-**建議的調整流程**：先用 `--preview` 在 PNG 上把版面與亮度調好，確認滿意才上實機，避免為了試參數反覆刷新面板。
+**Recommended tuning workflow**: use `--preview` to dial in layout and brightness on a PNG first, and only refresh the physical panel once you're satisfied — this avoids wearing out the panel by refreshing it repeatedly while experimenting with parameters.
 
-# 6. 顏色校正 Color calibration
+# 6. Color calibration
 
-E6 面板的實際原色比標稱色暗、飽和度低得多，而且**不同批次會有色差**。dither 若拿標稱色（純 0 / 255）計算誤差，結果會又髒又暗。每片面板都應該量一次：
+The E6 panel's actual primary colors are much darker and less saturated than their nominal values, and **colors vary between batches**. If dithering computes error against nominal colors (pure 0/255), the result looks dull and dark. Every panel should be measured once:
 
 ```shell
 $ python3 epaper_photo.py --calib
 ```
 
-1. 面板會顯示六個純色色塊（黑、白、黃、紅、藍、綠）
-2. 在白光（日光）下**正面**拍照，避免反光
-3. 用影像軟體取每個色塊中央的 RGB 平均值
-4. 填回 `epaper_photo.py` 的 `PALETTE_SRGB`（順序：black, white, yellow, red, blue, green）
-5. 清掉背景快取後重跑
+1. The panel displays six solid color blocks (black, white, yellow, red, blue, green)
+2. Photograph it **straight-on** under white (daylight) light, avoiding reflections
+3. Use image editing software to sample the average RGB value at the center of each color block
+4. Enter the values into `PALETTE_SRGB` in `epaper_photo.py` (order: black, white, yellow, red, blue, green)
+5. Clear the background cache and re-run
 
 ```shell
 $ rm -f .bg_cache.npz .frame_sig
 $ python3 dashboard.py --force
 ```
 
-# 7. 開機與每小時自動更新 Auto update with systemd
+# 7. Auto update with systemd
 
-`systemd/epaper-dash.service`（`User`、路徑請改成自己的帳號）
+`systemd/epaper-dash.service` (replace `User` and the paths with your own account)
 
 ```ini
 [Unit]
@@ -290,14 +290,14 @@ RandomizedDelaySec=30
 WantedBy=timers.target
 ```
 
-| 設定                  | 作用                                           |
-| --------------------- | ---------------------------------------------- |
-| `OnBootSec=2min`      | 開機、連上網路後更新一次                           |
-| `OnCalendar=*:00:00`  | 每小時整點更新                                    |
-| `Persistent=true`     | 錯過的排程（例如關機期間）開機後補跑                  |
-| `RandomizedDelaySec`  | 避免整點瞬間同時觸發                               |
+| Setting               | Effect                                                   |
+| --------------------- | ---------------------------------------------------------- |
+| `OnBootSec=2min`      | Update once after boot, once the network is up              |
+| `OnCalendar=*:00:00`  | Update on the hour, every hour                               |
+| `Persistent=true`     | Missed runs (e.g. while powered off) are caught up after boot |
+| `RandomizedDelaySec`  | Avoids all timers firing at exactly the same instant          |
 
-安裝與確認：
+Install and verify:
 
 ```shell
 $ sudo cp ~/epaper/systemd/epaper-dash.* /etc/systemd/system/
@@ -307,108 +307,108 @@ $ systemctl list-timers epaper-dash.timer
 $ journalctl -u epaper-dash.service -n 50 --no-pager
 ```
 
-每次執行時 `dashboard.py` 依序判斷：
+On every run, `dashboard.py` evaluates the following in order:
 
 ```mermaid
 flowchart TD
-    A[timer 觸發] --> B{距上次刷新 < 180s?}
-    B -- 是 --> X[跳過]
-    B -- 否 --> C{有網路?}
-    C -- 否 --> D{超過 20h 沒刷新?}
-    D -- 否 --> X
-    D -- 是 --> E[讀快取天氣，標記「離線」]
-    C -- 是 --> F[抓 Open-Meteo 天氣]
-    E --> G[合成畫面]
+    A[Timer triggers] --> B{Less than 180s since last refresh?}
+    B -- Yes --> X[Skip]
+    B -- No --> C{Network available?}
+    C -- No --> D{No refresh for over 20h?}
+    D -- No --> X
+    D -- Yes --> E[Read cached weather, mark "offline"]
+    C -- Yes --> F[Fetch Open-Meteo weather]
+    E --> G[Compose frame]
     F --> G
-    G --> H{畫面與上次相同?<br/>忽略時間戳}
-    H -- 是 --> X
-    H -- 否 --> I[init → display → sleep]
+    G --> H{Frame identical to last one?<br/>ignoring timestamp}
+    H -- Yes --> X
+    H -- No --> I[init → display → sleep]
 ```
 
-# 8. 運作原理 How it works
+# 8. How it works
 
 ```mermaid
 flowchart LR
-    P[背景照片] --> C[fit / crop<br/>800x480]
-    C --> L[轉 linear light]
-    L --> T[色域 / 動態範圍壓縮<br/>EXPOSURE, SATURATION]
-    T --> D[Floyd-Steinberg dither<br/>以實測 PALETTE 計算誤差]
-    D --> K[(.bg_cache.npz<br/>每張圖只算一次)]
-    K --> M[疊加 UI<br/>純色索引，不 dither]
-    W[Open-Meteo 天氣] --> M
-    M --> N[轉標稱色 RGB]
+    P[Background photo] --> C[fit / crop<br/>800x480]
+    C --> L[Convert to linear light]
+    L --> T[Gamut / dynamic range compression<br/>EXPOSURE, SATURATION]
+    T --> D[Floyd-Steinberg dither<br/>error computed against measured PALETTE]
+    D --> K[(.bg_cache.npz<br/>computed once per photo)]
+    K --> M[Overlay UI<br/>solid color indices, no dither]
+    W[Open-Meteo weather] --> M
+    M --> N[Convert to nominal RGB]
     N --> G[Waveshare getbuffer]
     G --> E[e-Paper]
 ```
 
-幾個關鍵設計：
+A few key design decisions:
 
-- **照片 dither、UI 不 dither。** 文字與圖示在 dither **之後**才以純色索引寫入，所以中文小字不會被誤差擴散打成雜點。文字一律白字加黑色描邊，放在任何亮度的照片上都讀得到。
-- **用實測色算、用標稱色送。** dither 的誤差用面板實測的 `PALETTE_SRGB` 計算，輸出時再換成標稱色（純 0 / 255）交給 Waveshare 的 `getbuffer()`。因為影像裡只剩那六個精確顏色，`getbuffer()` 的最近色比對是一對一無損的，旋轉與 4bpp 打包、各尺寸面板不同的色碼都交給官方驅動處理。
-- **在 linear light 做 dither。** 直接在 sRGB 值域做誤差擴散，中間調會偏暗、漸層會結塊。
-- **背景快取。** 照片一天才換一次，dither 結果存成 `.bg_cache.npz`，每小時的更新只重畫文字層。
+- **Photos are dithered, UI is not.** Text and icons are written with solid color indices *after* dithering, so small CJK text doesn't get scattered into noise by error diffusion. Text is always white with a black outline, so it stays readable on any photo brightness.
+- **Compute error against measured colors, output nominal colors.** Dithering error is computed against the panel's measured `PALETTE_SRGB`, then the output is converted to nominal colors (pure 0/255) before being handed to Waveshare's `getbuffer()`. Since the image now contains only those six exact colors, `getbuffer()`'s nearest-color matching is a lossless one-to-one mapping — rotation, 4bpp packing, and the different color codes across panel sizes are all left to the official driver.
+- **Dithering happens in linear light.** Doing error diffusion directly in sRGB values makes midtones look too dark and gradients band.
+- **Background caching.** Since the photo only changes once a day, the dithered result is cached to `.bg_cache.npz`, and hourly updates only redraw the text layer.
 
-# 9. 成果 Result
+# 9. Result
 
-> 實機效果：照片背景 + 天氣資訊
+> On-device result: photo background + weather info
 >
 > ![result_cat](img/result_photo_cat.jpg)
 
-> 實機效果：夜空照片背景
+> On-device result: night-sky photo background
 >
 > ![result_milkyway](img/result_photo_milkyway.jpg)
 
-> 刷新過程（4 倍速）。E6 全刷約 25 秒，過程中的閃爍是清除殘影的正常現象
+> Refresh in progress (4x speed). A full E6 refresh takes about 25 seconds; the flickering is normal ghost-clearing behavior
 >
 > ![refresh_demo](img/refresh_demo.gif)
 
-# 10. 注意事項 Precautions
+# 10. Precautions
 
-以下多數來自 Waveshare 官方說明，其中幾條是本專案實際踩過、讓一片 4 吋面板報廢的教訓：
+Most of these come from official Waveshare documentation; a few are lessons learned the hard way in this project, including one that destroyed a 4-inch panel:
 
-1. **刷新後一定要進 sleep 或斷電。** 面板長時間維持在高壓狀態會造成無法修復的損傷。本專案每次刷新後都會呼叫 `epd.sleep()`。
-2. **刷新間隔至少 180 秒。** 除錯時不要用 `--force` 連續刷新；先用 `--preview` 在 PNG 上驗證。
-3. **至少每 24 小時刷新一次**，否則長時間停留同一畫面會產生難以修復的殘影。
-4. **長期不用前先刷白再收。** 儲存條件：30 ℃ 以下、55 %RH 以下、最長 6 個月，面朝上存放。台灣濕度高，超過這個期限的面板有報廢風險。
-5. **FPC 排線只能沿水平方向彎**，不要垂直折、不要往正面折、不要反覆彎。
-6. 低溫下刷新可能偏色，需在 25 ℃ 環境放置 6 小時後再刷新。
-7. 僅建議室內使用，避免陽光直射。
-8. 多色面板不同批次有色差屬正常現象，所以每片都要做[顏色校正](#6-顏色校正-color-calibration)。
+1. **Always enter sleep mode or cut power after a refresh.** Leaving the panel at high voltage for a long time causes irreversible damage. This project calls `epd.sleep()` after every refresh.
+2. **Refresh interval must be at least 180 seconds.** Don't repeatedly refresh with `--force` while debugging — verify on a PNG with `--preview` first.
+3. **Refresh at least once every 24 hours**, or leaving the same image on screen for too long causes ghosting that's hard to remove.
+4. **Refresh to white before long-term storage.** Storage conditions: below 30 °C, below 55% RH, up to 6 months, stored face-up. Taiwan's humidity is high, and panels stored beyond this period risk becoming unusable.
+5. **Only bend the FPC cable horizontally**; never fold it vertically, toward the front, or bend it repeatedly.
+6. Refreshing at low temperature can cause color shifts — let the panel sit at 25 °C for 6 hours before refreshing.
+7. Indoor use only is recommended; avoid direct sunlight.
+8. Color variation between batches is normal for multi-color panels, so every panel should go through [color calibration](#6-color-calibration).
 
-# 11. 疑難排解 Troubleshooting
+# 11. Troubleshooting
 
-| 症狀                                                         | 原因                                                                  | 解法                                                                      |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `ModuleNotFoundError: No module named 'waveshare_epd'`        | `lib` 符號連結不存在或已斷；或用了 sudo（root 看不到使用者的 pip --user 安裝） | 重建 `lib` 符號連結（見第 3 節），不要用 sudo                                  |
-| systemd 失敗但手動執行正常                                     | service 的 `User`、路徑不對；或狀態檔擁有者不同                             | `sudo chown -R $USER:$USER ~/epaper`，檢查 `journalctl -u epaper-dash.service` |
-| log 顯示 `background: None`                                  | `bg/` 不在腳本旁邊，或副檔名不符（例如 `a.bmp.txt`）                       | `ls -la ~/epaper/bg/`                                                     |
-| 背景沒有換圖                                                  | 只有少量照片時每日輪替不明顯                                              | 多放幾張，或用 `--bg` 指定                                                   |
-| 照片偏暗                                                      | `SCRIM` 開著、`EXPOSURE` 太低、`PALETTE_SRGB` 沒校正                      | `SCRIM=0`、調高 `EXPOSURE`、做顏色校正，之後 `rm .bg_cache.npz`               |
-| 改了參數畫面沒變                                               | 背景快取仍是舊的（快取 key 只含照片路徑與 SCRIM 設定）                       | `rm -f .bg_cache.npz .frame_sig`                                          |
-| 畫面旋轉 90° 並有規則條紋                                       | 繞過 `getbuffer()` 自行打包，與面板掃描方向不符                             | 使用本專案現行版本（透過 `getbuffer()` 送資料）                                  |
-| 全白 / 全黑畫面上有固定位置的條紋                                 | 先跑 `recover.py --black`：全黑均勻 → 殘影；同位置有線 → 驅動線或膜層實體損傷  | 殘影跑 `recover.py --colours`；實體損傷無法修復，更換面板（驅動板可沿用）          |
-| 一直卡在 `e-Paper busy`                                        | SPI 未啟用或接線錯誤                                                     | 檢查 `ls /dev/spi*`、接線、SPI Select 開關                                   |
+| Symptom                                                       | Cause                                                                  | Fix                                                                      |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `ModuleNotFoundError: No module named 'waveshare_epd'`        | The `lib` symlink doesn't exist or is broken; or the script was run with sudo (root can't see the user's `pip --user` install) | Recreate the `lib` symlink (see section 3), and don't use sudo             |
+| systemd fails but running manually works                     | Wrong `User` or path in the service file; or state files are owned by a different user | `sudo chown -R $USER:$USER ~/epaper`, check `journalctl -u epaper-dash.service` |
+| Log shows `background: None`                                  | `bg/` isn't next to the script, or the extension doesn't match (e.g. `a.bmp.txt`) | `ls -la ~/epaper/bg/`                                                     |
+| Background photo never changes                                | Rotation isn't noticeable with only a few photos                        | Add more photos, or use `--bg` to specify one                             |
+| Photo looks too dark                                          | `SCRIM` is on, `EXPOSURE` too low, or `PALETTE_SRGB` isn't calibrated   | Set `SCRIM=0`, raise `EXPOSURE`, calibrate colors, then `rm .bg_cache.npz` |
+| Changed a parameter but the screen didn't change              | Background cache is stale (cache key only covers photo path and SCRIM setting) | `rm -f .bg_cache.npz .frame_sig`                                          |
+| Image is rotated 90° with regular stripes                     | Bypassed `getbuffer()` and packed data manually, mismatching the panel's scan direction | Use the current version of this project (sends data through `getbuffer()`) |
+| Fixed-position stripes on an all-white / all-black screen      | Run `recover.py --black` first: uniform black → ghosting; lines in the same spot → physical damage to driver lines or film layer | Ghosting: run `recover.py --colours`; physical damage can't be fixed — replace the panel (driver board can be reused) |
+| Stuck on `e-Paper busy`                                        | SPI not enabled or wiring error                                          | Check `ls /dev/spi*`, wiring, and the SPI Select switch                    |
 
-# 12. 更換面板 Porting to another panel
+# 12. Porting to another panel
 
-面板相關設定只集中在 `epaper_photo.py` 開頭兩行，`dashboard.py` 與 `recover.py` 都從這裡讀取；版面的字級與座標依 `H / 400` 等比縮放。
+Panel-specific settings are concentrated in the first two lines of `epaper_photo.py`; both `dashboard.py` and `recover.py` read from there. Layout font sizes and coordinates scale proportionally based on `H / 400`.
 
 ```python
 DRIVER = "epd7in3e"       # 4in0e -> "epd4in0e" | 7.3in E6 -> "epd7in3e"
 W, H = 800, 480           # 4in0e -> 600, 400    | 7.3in E6 -> 800, 480
 ```
 
-換面板後：
+After switching panels:
 
-1. 確認 `lib/waveshare_epd/` 內有對應的驅動檔
-2. 改上面兩行
-3. 用 `--preview` 檢查版面
-4. 重做[顏色校正](#6-顏色校正-color-calibration)
+1. Confirm the corresponding driver file exists under `lib/waveshare_epd/`
+2. Update the two lines above
+3. Use `--preview` to check the layout
+4. Redo [color calibration](#6-color-calibration)
 5. `rm -f .bg_cache.npz .frame_sig .last_refresh`
 
-各面板的色碼不同不需要處理，由 `getbuffer()` 負責。
+Differing color codes across panels don't need any handling — `getbuffer()` takes care of that.
 
-# 13. 參考資料 References
+# 13. References
 
 - [Waveshare 7.3inch e-Paper HAT (E) Manual](https://www.waveshare.com/wiki/7.3inch_e-Paper_HAT_(E)_Manual)
 - [Waveshare 7.3inch e-Paper HAT (E) product page](https://www.waveshare.com/product/raspberry-pi/displays/e-paper/7.3inch-e-paper-hat-e.htm)
