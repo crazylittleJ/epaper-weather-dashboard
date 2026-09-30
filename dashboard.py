@@ -15,6 +15,8 @@ Usage: python3 dashboard.py                      # render to the panel
        python3 dashboard.py --bg bg/a.bmp         # force one background image
        python3 dashboard.py --preview /tmp/p.png  # render to a PNG instead
        python3 dashboard.py --force               # skip the refresh guards
+       python3 dashboard.py --lat=25.03 --lon=121.56 --loc=台北
+       python3 dashboard.py --help                # full option list
 
 Run as your normal user, NOT with sudo: sudo does not see a --user pip install
 or your group membership in spi/gpio.
@@ -23,7 +25,8 @@ Deps:  sudo apt install python3-pil python3-numpy fonts-noto-cjk
        (spidev / gpiozero already installed for the Waveshare lib)
 """
 
-import os, sys, json, time, logging, urllib.request, urllib.parse, urllib.error
+import os, sys, json, time, logging, argparse
+import urllib.request, urllib.parse, urllib.error
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
@@ -39,8 +42,9 @@ from epaper_photo import (
 )
 
 # ------------------------- config -------------------------
-LAT, LON = 24.8138, 120.9675          # 新竹；改成你要的座標
-PLACE    = "新竹"
+# 預設地點；也可用 --lat / --lon / --loc 於執行時覆寫
+DEFAULT_LAT, DEFAULT_LON, DEFAULT_PLACE = 24.8138, 120.9675, "新竹"
+LAT, LON, PLACE = DEFAULT_LAT, DEFAULT_LON, DEFAULT_PLACE
 TZ       = "Asia/Taipei"
 
 BG_DIR    = os.path.join(HERE, "bg")           # 放當地照片，每天輪一張
@@ -122,6 +126,7 @@ def get_weather(retries=5):
         try:
             d = fetch_weather()
             d["_fetched"] = time.time()
+            d["_loc"] = [round(LAT, 4), round(LON, 4)]
             with open(CACHE, "w") as f:
                 json.dump(d, f)
             return d, False
@@ -130,7 +135,10 @@ def get_weather(retries=5):
             time.sleep(min(60, 5 * 2 ** attempt))
     if os.path.exists(CACHE):
         with open(CACHE) as f:
-            return json.load(f), True
+            cached = json.load(f)
+        if cached.get("_loc") == [round(LAT, 4), round(LON, 4)]:
+            return cached, True
+        logging.warning("cached forecast is for a different location; discarding")
     return None, True
 
 
@@ -274,7 +282,7 @@ def build_overlay(w, stale):
     cur = w["current"]
     day = w["daily"]
     code = int(cur["weather_code"])
-    desc, kind = WMO.get(code, ("—", "cloud"))
+    desc = WMO.get(code, ("—", "cloud"))[0]
 
     lt = time.localtime()
     header = f"{PLACE}   {lt.tm_mon}/{lt.tm_mday} (週{WEEK[lt.tm_wday]})"
@@ -293,9 +301,6 @@ def build_overlay(w, stale):
     pop = day["precipitation_probability_max"][0]
     pc = (I_RED + 1) if pop >= 70 else (I_YELLOW + 1) if pop >= 40 else FG
     t((s(30), s(250)), f"降雨機率 {pop}%", f_small, fill=pc)
-
-    # hero icon, top right
-    icon(d, W - s(122), s(118), s(78), kind, ST)
 
     # 4-day strip along the bottom
     y0 = H - s(108)
@@ -369,18 +374,71 @@ def show(idx, sig=None):
             f.write(sig)
 
 
+def _latitude(v):
+    try:
+        f = float(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {v!r}")
+    if not -90.0 <= f <= 90.0:
+        raise argparse.ArgumentTypeError(f"latitude out of range (-90..90): {f}")
+    return f
+
+
+def _longitude(v):
+    try:
+        f = float(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {v!r}")
+    if not -180.0 <= f <= 180.0:
+        raise argparse.ArgumentTypeError(f"longitude out of range (-180..180): {f}")
+    return f
+
+
+def _place(v):
+    v = v.strip()
+    if not v:
+        raise argparse.ArgumentTypeError("location name is empty")
+    if any(ord(c) < 32 for c in v):
+        raise argparse.ArgumentTypeError("location name contains control characters")
+    if len(v) > 12:
+        raise argparse.ArgumentTypeError(
+            f"location name too long for the header ({len(v)} chars, max 12)")
+    return v
+
+
+def parse_args(argv=None):
+    p = argparse.ArgumentParser(
+        description="Render a weather dashboard onto a Spectra 6 e-Paper panel.")
+    p.add_argument("--bg", metavar="IMAGE",
+                   help="use this background image instead of the daily rotation")
+    p.add_argument("--preview", metavar="OUT.PNG",
+                   help="write the frame to this PNG instead of the panel")
+    p.add_argument("--force", action="store_true",
+                   help="skip the refresh-interval and unchanged-frame guards")
+    p.add_argument("--lat", type=_latitude, default=DEFAULT_LAT,
+                   help=f"latitude (default: {DEFAULT_LAT})")
+    p.add_argument("--lon", type=_longitude, default=DEFAULT_LON,
+                   help=f"longitude (default: {DEFAULT_LON})")
+    p.add_argument("--loc", type=_place, default=DEFAULT_PLACE,
+                   help=f"place name shown in the header (default: {DEFAULT_PLACE})")
+    a = p.parse_args(argv)
+    if (a.lat != DEFAULT_LAT or a.lon != DEFAULT_LON) and a.loc == DEFAULT_PLACE:
+        p.error("--lat/--lon given without --loc: the header would still say "
+                f"{DEFAULT_PLACE!r}. Pass --loc too.")
+    if a.bg and not os.path.isfile(a.bg):
+        p.error(f"--bg: no such file: {a.bg}")
+    return a
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
-    preview = "--preview" in sys.argv
-    force = "--force" in sys.argv
-
-    if "--bg" in sys.argv:
-        p = os.path.abspath(sys.argv[sys.argv.index("--bg") + 1])
-        if not os.path.isfile(p):
-            logging.error("--bg: no such file: %s", p)
-            sys.exit(2)
-        BG_OVERRIDE = p
+    args = parse_args()
+    LAT, LON, PLACE = args.lat, args.lon, args.loc
+    preview = args.preview is not None
+    force = args.force
+    if args.bg:
+        BG_OVERRIDE = os.path.abspath(args.bg)
 
     if not preview:
         try:
@@ -411,7 +469,7 @@ if __name__ == "__main__":
     idx = compose(build_background(), build_overlay(w, stale))
 
     if preview:
-        out = sys.argv[sys.argv.index("--preview") + 1]
+        out = args.preview
         # --preview takes an OUTPUT path; refuse to clobber a source image
         if os.path.abspath(out).startswith(os.path.abspath(BG_DIR) + os.sep):
             logging.error("--preview writes TO this path; %s is a source image. "
