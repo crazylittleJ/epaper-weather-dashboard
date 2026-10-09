@@ -44,7 +44,7 @@ File History :
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode, python3-markdown | All installed via apt                      |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode | All installed via apt                      |
 | Font        | fonts-noto-cjk                                    | CJK font                                   |
 | Weather API | [Open-Meteo](https://open-meteo.com/)             | No API key required                        |
 
@@ -131,7 +131,7 @@ $ ls /dev/spi*        # should show /dev/spidev0.0 /dev/spidev0.1
 ```shell
 $ sudo apt update
 $ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk \
-                 python3-flask python3-qrcode python3-markdown avahi-daemon
+                 python3-flask python3-qrcode avahi-daemon
 ```
 
 **Step 3. User groups (no sudo required to run the scripts)**
@@ -170,6 +170,7 @@ Directory structure:
 ├── config.py
 ├── config.json              # location and time zone, written by the settings page (appears after first setup)
 ├── templates/               # settings page templates
+├── help/                    # help pages (generated from the READMEs by build_help.py)
 ├── lib -> ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib   (symlink)
 ├── bg/                      # background photos: jpg / png / bmp
 ├── systemd/
@@ -185,7 +186,7 @@ Directory structure:
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# copy all .py files, README*.md, img/, templates/, systemd/, polkit/ and networkmanager/ here
+# copy all .py files, help/, img/, templates/, systemd/, polkit/ and networkmanager/ here
 
 # link in Waveshare's python lib (note: it's the python/lib level, not waveshare_epd)
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
@@ -385,7 +386,7 @@ This lets someone get the frame onto their home network and set the location and
 ```mermaid
 flowchart TD
     A[Boot] --> B{Saved network up within 90 s?<br/>Wi-Fi or Ethernet}
-    B -- Yes --> N[Normal mode<br/>settings page at http://hostname.local]
+    B -- Yes --> N["Normal mode<br/>settings page at hostname.local"]
     B -- No / reset button held at boot --> S[Scan nearby Wi-Fi]
     S --> H[Start hotspot ePaper-Setup-XXXX]
     H --> P[Panel shows setup screen with two QR codes]
@@ -412,6 +413,13 @@ From then on, `http://<hostname>.local` (e.g. `http://epaper.local`) on the same
 - Refresh the panel now
 - Redo Wi-Fi setup (new router or new password)
 - Read the help at `http://<hostname>.local/help`: this README, with a Chinese/English switch (defaults to the browser language; `?lang=zh-TW` / `?lang=en` picks one, and `/help-zh-TW` / `/help-en` work too). Flowcharts need internet to render and show as plain text offline
+
+The help pages are pre-built HTML (`help/help-zh-TW.html`, `help/help-en.html`), so the Pi needs no Markdown library. After editing a README, rebuild them on your computer and commit them together with the README:
+
+```shell
+$ pip install markdown
+$ python3 build_help.py
+```
 
 > Settings page: current settings and location (search for a city, or enter coordinates by hand)
 >

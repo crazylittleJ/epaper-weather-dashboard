@@ -16,14 +16,15 @@ Usage: python3 portal.py                        # what epaper-portal.service run
        python3 portal.py --preview /tmp/s.png   # render the setup screen only
        python3 portal.py --port 8080 --no-panel # development
 
-Help:  http://<hostname>.local/help renders README.zh-TW.md / README.md
-       (?lang=zh-TW|en, default follows the browser language)
+Help:  http://<hostname>.local/help serves help/help-zh-TW.html or help-en.html
+       (?lang=zh-TW|en, default follows the browser language). Those pages
+       are built from the READMEs by build_help.py.
 
-Deps:  sudo apt install python3-flask python3-qrcode python3-markdown
+Deps:  sudo apt install python3-flask python3-qrcode
        plus the polkit rule and dnsmasq snippet described in the README
 """
 
-import os, re, sys, time, json, html, signal, socket, secrets, logging, argparse, threading
+import os, sys, time, json, signal, socket, secrets, logging, argparse, threading
 import subprocess, urllib.request, urllib.parse
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps
@@ -46,7 +47,8 @@ THUMB_DIR    = os.path.join(HERE, ".thumbs")
 PHOTO_EXT    = (".jpg", ".jpeg", ".png", ".bmp")
 GEO_URL      = "https://geocoding-api.open-meteo.com/v1/search"
 IMG_DIR      = os.path.join(HERE, "img")
-HELP_DOCS    = {"zh-TW": "README.zh-TW.md", "en": "README.md"}
+HELP_DIR     = os.path.join(HERE, "help")                # built by build_help.py
+HELP_PAGES   = {"zh-TW": "help-zh-TW.html", "en": "help-en.html"}
 # ----------------------------------------------------------
 
 
@@ -344,54 +346,6 @@ def save_photo(fs):
     return name
 
 
-# --------------------------- help ---------------------------
-
-_help_cache = {}           # lang -> (mtime, html)
-
-
-def _github_slug(value, separator):
-    """Heading ids the way GitHub makes them, so the READMEs' own TOC links
-    (CJK headings included) work here too. Python-Markdown's default slugify
-    drops every non-ASCII character."""
-    v = re.sub(r"[^\w\- ]", "", value.strip().lower())
-    return v.replace(" ", separator)
-
-
-def _gfm_tables(text):
-    """GitHub lets a table start right under a paragraph line; Python-Markdown
-    needs a blank line first. Code fences are left alone."""
-    out, fenced, prev = [], False, ""
-    for line in text.split("\n"):
-        if line.lstrip().startswith("```"):
-            fenced = not fenced
-        elif not fenced and line.startswith("|") and prev.strip() and not prev.startswith("|"):
-            out.append("")
-        out.append(line)
-        prev = line
-    return "\n".join(out)
-
-
-def render_help(lang):
-    """README -> HTML, re-rendered only when the file changes."""
-    path = os.path.join(HERE, HELP_DOCS[lang])
-    mtime = os.path.getmtime(path)
-    hit = _help_cache.get(lang)
-    if hit and hit[0] == mtime:
-        return hit[1]
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
-    try:
-        import markdown
-        doc = markdown.markdown(
-            _gfm_tables(text), extensions=["tables", "fenced_code", "toc", "md_in_html"],
-            extension_configs={"toc": {"slugify": _github_slug}})
-    except ImportError:
-        logging.warning("python3-markdown not installed; serving the README as plain text")
-        doc = f"<pre>{html.escape(text)}</pre>"
-    _help_cache[lang] = (mtime, doc)
-    return doc
-
-
 # --------------------------- web ---------------------------
 
 app = Flask(__name__, template_folder=os.path.join(HERE, "templates"))
@@ -410,7 +364,7 @@ def guard():
         # included) is bounced to the setup page so the OS pops it up
         if request.host.split(":")[0] not in (wifi.AP_ADDR, "localhost", "127.0.0.1"):
             return redirect(f"http://{wifi.AP_ADDR}/")
-        if request.endpoint not in ("index", "connect", "help", "img"):
+        if request.endpoint not in ("index", "connect", "help", "help_lang", "img"):
             return redirect(url_for("index"))
     if request.method == "POST":
         # cheap CSRF guard: browsers send Origin on cross-site POSTs
@@ -550,25 +504,18 @@ def refresh():
 @app.get("/help", endpoint="help")
 def help_page():
     lang = request.args.get("lang")
-    if lang not in HELP_DOCS:
+    if lang not in HELP_PAGES:
         best = request.accept_languages.best_match(["zh-TW", "zh", "en"], default="zh-TW")
         lang = "en" if best == "en" else "zh-TW"
-    try:
-        doc = render_help(lang)
-    except OSError:
+    return send_from_directory(HELP_DIR, HELP_PAGES[lang])
+
+
+@app.get("/help-<lang>")
+@app.get("/help-<lang>.html")
+def help_lang(lang):
+    if lang not in HELP_PAGES:
         abort(404)
-    return render_template("help.html", lang=lang, doc=doc,
-                           has_mermaid="language-mermaid" in doc)
-
-
-@app.get("/help-zh-TW")
-def help_zh():
-    return redirect(url_for("help", lang="zh-TW"))
-
-
-@app.get("/help-en")
-def help_en():
-    return redirect(url_for("help", lang="en"))
+    return send_from_directory(HELP_DIR, HELP_PAGES[lang])
 
 
 @app.get("/img/<path:name>")
