@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Waveshare driver symlink (see README section 3)
+lib
+
+# Personal background photos
+bg/
+
+# Per-device settings and secrets, written by portal.py
+config.json
+.ap_psk
+
+# Runtime state and caches, written by dashboard.py / portal.py
+weather.json
+.last_refresh
+.bg_cache.npz
+.frame_sig
+.setup_mode
+.panel_lock
+.thumbs/

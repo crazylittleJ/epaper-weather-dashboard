@@ -412,6 +412,18 @@ flowchart TD
 - 立即更新畫面
 - 重新設定 Wi-Fi（換路由器或改密碼時使用）
 
+> 設定網頁：目前設定與地點（可搜尋城市，或手動輸入經緯度）
+>
+> ![wifi_location_info](img/wifi_location_info.png)
+
+> 設定網頁：背景照片上傳與刪除
+>
+> ![background_update](img/background_update.png)
+
+> 設定網頁：重新設定 Wi-Fi
+>
+> ![reset_wifi](img/reset_wifi.png)
+
 > 設定頁上的城市搜尋要等連上網路後才能進行：設定模式下 Pi 和手機都沒有網路。所以 Wi-Fi 設定頁只讓使用者輸入城市名稱，連上網路後才查詢座標（取第一筆結果）。查不到時，設定網頁會提示重新搜尋。
 
 > 目前不會套用照片的 EXIF 方向。用手機拍的直式照片，上傳後在面板上可能會轉向。

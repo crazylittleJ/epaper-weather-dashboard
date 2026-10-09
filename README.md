@@ -412,6 +412,18 @@ From then on, `http://<hostname>.local` (e.g. `http://epaper.local`) on the same
 - Refresh the panel now
 - Redo Wi-Fi setup (new router or new password)
 
+> Settings page: current settings and location (search for a city, or enter coordinates by hand)
+>
+> ![wifi_location_info](img/wifi_location_info.png)
+
+> Settings page: uploading and deleting background photos
+>
+> ![background_update](img/background_update.png)
+
+> Settings page: redo Wi-Fi setup
+>
+> ![reset_wifi](img/reset_wifi.png)
+
 > City search can't happen on the Wi-Fi setup page itself: in setup mode neither the Pi nor the phone has internet. So that page only takes a city name, and the coordinates are looked up after the Pi joins the network (first result wins). If nothing matches, the settings page asks for a new search.
 
 > Photo EXIF orientation is not applied yet, so a portrait photo straight from a phone may appear rotated on the panel.
