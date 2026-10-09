@@ -2,15 +2,16 @@
 > ### <div style="text-align: right"> <font color="#02c59b">E-Paper Photo Frame</font> </div>
 > ### <div style="text-align: right"> <font color="#ffcc00">Spectra 6 (E6) Full-Color e-Paper Weather Dashboard on Raspberry Pi 3</font></div>
 >
-> <div style="text-align: right"> Version: 1.1.0 </div>
+> <div style="text-align: right"> Version: 1.2.0 </div>
 > <div style="text-align: right"> Author: J </div>
-> <div style="text-align: right"> Date: 2026/09/29 </div>
+> <div style="text-align: right"> Date: 2026/10/09 </div>
 
 File History :
 |         Type          |                         Description                          | Name |    Date    |
 | :-------------------: | :----------------------------------------------------------: | :--: | :--------: |
 | v1.0.0 first release  | 7.3" E6 (epd7in3e) photo frame + weather dashboard + hourly update | J | 2026/09/21 |
 | v1.1.0 second release | 移除右上角天氣圖示；新增 `--lat` / `--lon` / `--loc` 參數與防呆     | J | 2026/09/29 |
+| v1.2.0 third release  | 新增 Wi-Fi 設定模式（熱點 + QR Code + captive portal）與設定網頁；地點改存於 `config.json` | J | 2026/10/09 |
 
 <div style="page-break-after: always;"></div>
 
@@ -27,12 +28,13 @@ File History :
 - [5. 使用方式 Usage](#5-使用方式-usage)
 - [6. 顏色校正 Color calibration](#6-顏色校正-color-calibration)
 - [7. 開機與每小時自動更新 Auto update with systemd](#7-開機與每小時自動更新-auto-update-with-systemd)
-- [8. 運作原理 How it works](#8-運作原理-how-it-works)
-- [9. 成果 Result](#9-成果-result)
-- [10. 注意事項 Precautions](#10-注意事項-precautions)
-- [11. 疑難排解 Troubleshooting](#11-疑難排解-troubleshooting)
-- [12. 更換面板 Porting to another panel](#12-更換面板-porting-to-another-panel)
-- [13. 參考資料 References](#13-參考資料-references)
+- [8. Wi-Fi 設定與設定網頁 Wi-Fi setup & settings page](#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page)
+- [9. 運作原理 How it works](#9-運作原理-how-it-works)
+- [10. 成果 Result](#10-成果-result)
+- [11. 注意事項 Precautions](#11-注意事項-precautions)
+- [12. 疑難排解 Troubleshooting](#12-疑難排解-troubleshooting)
+- [13. 更換面板 Porting to another panel](#13-更換面板-porting-to-another-panel)
+- [14. 參考資料 References](#14-參考資料-references)
 
 # Test Environment
 
@@ -42,7 +44,7 @@ File History :
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero      | 皆由 apt 安裝                               |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode | 皆由 apt 安裝                               |
 | Font        | fonts-noto-cjk                                    | 中文字型                                    |
 | Weather API | [Open-Meteo](https://open-meteo.com/)             | 免 API key                                 |
 
@@ -56,14 +58,18 @@ File History :
 - 開機連上網路後更新一次，之後每小時整點更新
 - 沒網路就不刷新；但超過 20 小時沒刷新會用快取資料強制刷一次（面板規格要求 24 小時內至少刷一次）
 - 畫面內容沒變（只差時間戳）就跳過刷新，減少閃爍與面板耗損
+- 連不上網路時面板會顯示 QR Code，用手機就能設定 Wi-Fi 與地點；之後可以在設定網頁更換地點、上傳照片，不需要 SSH（見[第 8 節](#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page)）
 
-三支腳本：
+主要腳本：
 
 | Script            | 用途                                                             |
 | ----------------- | ---------------------------------------------------------------- |
 | `epaper_photo.py` | 影像處理 pipeline（色域壓縮 + dither）、面板設定、單張照片顯示、顏色校正 |
 | `dashboard.py`    | 天氣看板主程式：抓天氣、疊加文字圖示、刷新面板                         |
 | `recover.py`      | 面板診斷（全黑測試）與殘影救援（黑白 / 六色交替全刷）                   |
+| `portal.py`       | Wi-Fi 設定模式（熱點、面板 QR Code、captive portal）與設定網頁           |
+| `wifi.py`         | `nmcli` 包裝：掃描、開關熱點、連線                                     |
+| `config.py`       | `config.json`（地點、時區）讀寫與驗證，`dashboard.py` 與 `portal.py` 共用 |
 
 # 1. 硬體 Hardware
 
@@ -124,12 +130,13 @@ $ ls /dev/spi*        # 應看到 /dev/spidev0.0 /dev/spidev0.1
 
 ```shell
 $ sudo apt update
-$ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk
+$ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk \
+                 python3-flask python3-qrcode avahi-daemon
 ```
 
 **Step 3. 使用者群組（不需要 sudo 執行）**
 
-一般使用者只要在 `spi`、`gpio` 群組就能驅動面板。本專案的腳本**一律不要用 sudo 執行**（見 [11. 疑難排解](#11-疑難排解-troubleshooting)）。
+一般使用者只要在 `spi`、`gpio` 群組就能驅動面板。本專案的腳本**一律不要用 sudo 執行**（見 [12. 疑難排解](#12-疑難排解-troubleshooting)）。
 
 ```shell
 $ id                                  # 確認有 spi、gpio
@@ -158,17 +165,27 @@ $ python3 epd_7in3e_test.py
 ├── epaper_photo.py
 ├── dashboard.py
 ├── recover.py
+├── portal.py
+├── wifi.py
+├── config.py
+├── config.json              # 地點與時區，由設定網頁寫入（第一次設定後才會出現）
+├── templates/               # 設定網頁模板
 ├── lib -> ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib   (symlink)
 ├── bg/                      # 背景照片，放 jpg / png / bmp
 ├── systemd/
 │   ├── epaper-dash.service
-│   └── epaper-dash.timer
+│   ├── epaper-dash.timer
+│   └── epaper-portal.service
+├── polkit/
+│   └── 50-epaper-networkmanager.rules
+├── networkmanager/
+│   └── captive-portal.conf
 └── img/                     # README 用圖
 ```
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# 放入三支 .py 與 systemd/
+# 放入所有 .py、templates/、systemd/、polkit/、networkmanager/
 
 # 把 Waveshare 的 python lib 接進來（注意是 python/lib 這層，不是 waveshare_epd）
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
@@ -197,13 +214,26 @@ $ cp ~/Pictures/*.jpg ~/epaper/bg/
 
 | 參數              | 預設                    | 說明                                             |
 | ----------------- | ----------------------- | ------------------------------------------------ |
-| `DEFAULT_LAT/LON` | `24.8138, 120.9675`     | 預設天氣查詢座標，可用 `--lat` / `--lon` 覆寫           |
-| `DEFAULT_PLACE`   | `"新竹"`                | 預設顯示地名，可用 `--loc` 覆寫                        |
-| `TZ`              | `"Asia/Taipei"`         | 時區                                              |
+| `DEFAULT_LAT/LON` | 讀自 `config.json`       | 預設天氣查詢座標，可用 `--lat` / `--lon` 覆寫           |
+| `DEFAULT_PLACE`   | 讀自 `config.json`       | 預設顯示地名，可用 `--loc` 覆寫                        |
+| `TZ`              | 讀自 `config.json`       | 時區                                              |
 | `SCRIM`           | `0.0`                   | 背景壓暗程度。0 = 照片原樣；文字靠黑色描邊維持可讀性       |
 | `SCRIM_BANDS`     | `False`                 | 額外壓暗上下兩條 UI 區域                             |
 | `MIN_INTERVAL`    | `180`                   | 最短刷新間隔（秒），面板規格要求                        |
 | `MAX_AGE`         | `20 * 3600`             | 超過此時間沒刷新就強制刷新（面板規格要求 < 24 h）         |
+
+**`config.json`：地點與時區**
+
+由設定網頁寫入，也可以手動編輯。檔案不存在或某個值不合法時，該值改用 `config.py` 的 `DEFAULTS`（新竹 `24.8138, 120.9675`、`Asia/Taipei`），看板照常運作。
+
+```json
+{
+  "lat": 24.8138,
+  "lon": 120.9675,
+  "place": "新竹",
+  "tz": "Asia/Taipei"
+}
+```
 
 # 5. 使用方式 Usage
 
@@ -223,7 +253,7 @@ $ python3 dashboard.py --help                       # 完整參數說明
 
 **地點參數 `--lat` / `--lon` / `--loc`**
 
-不指定時使用 `dashboard.py` 裡的 `DEFAULT_LAT` / `DEFAULT_LON` / `DEFAULT_PLACE`（新竹）。systemd service 不帶這些參數，所以**自動更新一律使用預設座標**，臨時用參數查別的地點不會影響排程。
+不指定時使用 `config.json` 的地點（由設定網頁寫入；檔案不存在時為新竹）。systemd service 不帶這些參數，所以**自動更新一律使用 `config.json` 的地點**，臨時用參數查別的地點不會影響排程。
 
 防呆規則：
 
@@ -316,7 +346,7 @@ WantedBy=timers.target
 | `Persistent=true`     | 錯過的排程（例如關機期間）開機後補跑                  |
 | `RandomizedDelaySec`  | 避免整點瞬間同時觸發                               |
 
-service 的 `ExecStart` 不帶地點參數，因此自動更新永遠使用 `dashboard.py` 裡的預設座標。要改排程用的地點，直接改 `DEFAULT_LAT` / `DEFAULT_LON` / `DEFAULT_PLACE`，不要改 service 檔。
+service 的 `ExecStart` 不帶地點參數，因此自動更新永遠使用 `config.json` 的地點。要改排程用的地點，用設定網頁（見[第 8 節](#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page)）或直接編輯 `config.json`，不要改 service 檔。
 
 安裝與確認：
 
@@ -332,7 +362,9 @@ $ journalctl -u epaper-dash.service -n 50 --no-pager
 
 ```mermaid
 flowchart TD
-    A[timer 觸發] --> B{距上次刷新 < 180s?}
+    A[timer 觸發] --> S{Wi-Fi 設定畫面顯示中?}
+    S -- 是 --> X[跳過]
+    S -- 否 --> B{距上次刷新 < 180s?}
     B -- 是 --> X[跳過]
     B -- 否 --> C{有網路?}
     C -- 否 --> D{超過 20h 沒刷新?}
@@ -346,7 +378,136 @@ flowchart TD
     H -- 否 --> I[init → display → sleep]
 ```
 
-# 8. 運作原理 How it works
+# 8. Wi-Fi 設定與設定網頁 Wi-Fi setup & settings page
+
+讓使用者不用 SSH、不用改程式碼，就能在自己家把看板連上網路並設定地點與照片。流程和市售智慧插座類似：連不上網路時，Pi 自己開一個 Wi-Fi 熱點，面板顯示 QR Code，用手機設定。
+
+```mermaid
+flowchart TD
+    A[開機] --> B{90 秒內連上已存的網路?<br/>Wi-Fi 或有線}
+    B -- 是 --> N[一般模式<br/>設定網頁 http://主機名稱.local]
+    B -- 否 / 開機時按住重設鈕 --> S[掃描附近 Wi-Fi]
+    S --> H[開熱點 ePaper-Setup-XXXX]
+    H --> P[面板顯示設定畫面與兩個 QR Code]
+    P --> W[手機連上熱點，自動跳出設定頁<br/>選 Wi-Fi、輸入密碼與城市]
+    W --> C{連線成功?}
+    C -- 是 --> G[查詢城市座標，寫入 config.json]
+    G --> D[刷新天氣看板]
+    D --> N
+    C -- 否 --> H
+```
+
+**使用者的操作步驟**
+
+1. 插電開機。約 2 分鐘後，面板會顯示「Wi-Fi 設定」畫面
+2. 用手機相機掃描左邊的 QR Code 加入熱點（或手動加入畫面上的熱點名稱與密碼）
+3. 手機通常會自動跳出設定頁；沒有的話，掃描右邊的 QR Code，或開啟 `http://10.42.0.1/`
+4. 選擇家中的 Wi-Fi，輸入密碼與城市名稱，按「連線」
+5. 手機切回家中的 Wi-Fi。成功的話，1–4 分鐘內面板會換成天氣看板；失敗的話熱點會重新出現，再連上一次，設定頁會顯示錯誤原因
+
+之後在同一個網路下開啟 `http://<主機名稱>.local`（例如 `http://epaper.local`），可以：
+
+- 搜尋城市並更換地點（使用 Open-Meteo Geocoding API，不需要自己查經緯度），可以自訂看板上顯示的名稱
+- 上傳或刪除背景照片，並看到今天輪到哪一張
+- 立即更新畫面
+- 重新設定 Wi-Fi（換路由器或改密碼時使用）
+
+> 設定頁上的城市搜尋要等連上網路後才能進行：設定模式下 Pi 和手機都沒有網路。所以 Wi-Fi 設定頁只讓使用者輸入城市名稱，連上網路後才查詢座標（取第一筆結果）。查不到時，設定網頁會提示重新搜尋。
+
+> 目前不會套用照片的 EXIF 方向。用手機拍的直式照片，上傳後在面板上可能會轉向。
+
+面板設定畫面的版面：左邊是加入熱點的 QR Code（`WIFI:` 格式，iOS / Android 相機都能直接加入），中間是設定頁網址的 QR Code，右邊是熱點名稱、密碼、網址和「只支援 2.4 GHz」的提示。
+
+**安裝**
+
+需要 Raspberry Pi OS Bookworm 以後的版本（預設使用 NetworkManager）。
+
+```shell
+$ cd ~/epaper
+
+# 1. 允許你的帳號操作 NetworkManager（先把檔案裡的 "ej" 改成你的帳號）
+$ sudo cp polkit/50-epaper-networkmanager.rules /etc/polkit-1/rules.d/
+
+# 2. captive portal：熱點上所有 DNS 查詢都指向 Pi，手機才會自動跳出設定頁
+$ sudo cp networkmanager/captive-portal.conf /etc/NetworkManager/dnsmasq-shared.d/
+
+# 3. 主機名稱，決定設定網頁的網址（這裡是 http://epaper.local）
+$ sudo raspi-config nonint do_hostname epaper
+
+# 4. 開機自動啟動（先把 User 與路徑改成自己的帳號）
+$ sudo cp systemd/epaper-portal.service /etc/systemd/system/
+$ sudo systemctl daemon-reload
+$ sudo systemctl enable --now epaper-portal.service
+$ journalctl -u epaper-portal.service -f
+```
+
+`systemd/epaper-portal.service`
+
+```ini
+[Unit]
+Description=e-Paper Wi-Fi setup portal and settings page
+Wants=NetworkManager.service
+After=NetworkManager.service
+
+[Service]
+User=ej
+WorkingDirectory=/home/ej/epaper
+ExecStart=/usr/bin/python3 /home/ej/epaper/portal.py
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`portal.py` 以一般使用者執行：polkit 規則讓它能操作 NetworkManager，`AmbientCapabilities` 讓它能綁定 80 port（captive portal 必須是 port 80 的 `http://`）。這樣它寫出的狀態檔（`.last_refresh` 等）和 `dashboard.py` 是同一個擁有者。
+
+**測試**
+
+```shell
+$ python3 portal.py --preview /tmp/setup.png       # 只看設定畫面長相，不碰面板與網路
+$ python3 portal.py --port 8080 --no-panel         # 開發設定網頁（先停掉 service）
+```
+
+想實際走一次設定流程，可以在設定網頁按「重新設定 Wi-Fi」，或在開機時按住重設鈕。⚠️ 如果你是透過 Wi-Fi SSH 進來的，連線會中斷。
+
+**重設按鈕（選配）**
+
+在 BCM 26（實體 pin 37）和 GND（pin 39）之間接一顆按鈕，開機時按住就會強制進入設定模式。要換腳位，改 `portal.py` 的 `BUTTON_PIN`；沒接按鈕也不會誤觸發（使用內部上拉），也可以設成 `None`。
+
+**`portal.py` 參數**
+
+| 參數 / 選項            | 預設   | 說明                                                         |
+| --------------------- | ------ | ------------------------------------------------------------ |
+| `CONNECT_WAIT`        | `90`   | 開機後等已存網路連上的秒數。完全沒存 Wi-Fi 時只等 15 秒（給有線網路） |
+| `BUTTON_PIN`          | `26`   | 重設按鈕的 BCM 腳位，`None` 表示不使用                           |
+| `--setup`             |        | 強制以設定模式啟動                                              |
+| `--preview OUT.PNG`   |        | 只把設定畫面輸出成 PNG                                          |
+| `--port`              | `80`   | 網頁的 port                                                   |
+| `--no-panel`          |        | 不刷新面板（開發用）                                            |
+
+**和面板保護規則的配合**
+
+- 顯示設定畫面也是一次完整刷新，同樣遵守 180 秒最短間隔，刷完立刻 sleep
+- 設定模式期間，`dashboard.py` 會跳過排程更新，不蓋掉設定畫面（以 `.setup_mode` 標記檔判斷）。改由 `portal.py` 在超過 20 小時沒刷新時重刷設定畫面，維持 24 小時內至少刷新一次
+- `portal.py` 和 `dashboard.py` 用檔案鎖 `.panel_lock` 互斥，不會同時驅動 SPI
+- 設定網頁送出多個刷新請求時會合併成一次
+
+**Pi 3B 的限制**
+
+- 只支援 **2.4 GHz** Wi-Fi，5 GHz 網路不會出現在清單中。雙頻路由器的兩個頻段同名時通常沒有問題
+- 只有一顆無線晶片，開著熱點時無法同時掃描，所以清單是開熱點**之前**掃到的。找不到時可以手動輸入名稱（也適用於隱藏網路）
+- 支援 WPA2-Personal（含 WPA2/WPA3 混合模式）和開放網路；不支援需要帳號的企業網路（WPA2-Enterprise），也不支援飯店那種要網頁登入的網路
+
+**安全性（第一版的限制）**
+
+- 熱點密碼每台隨機產生（存在 `.ap_psk`，權限 600），只顯示在面板上：看得到螢幕的人才能連
+- 設定網頁**沒有登入機制**：同一個區網內的任何人都能修改地點、上傳或刪除照片。只有跨站 POST 會被擋下（檢查 `Origin` header）
+- Wi-Fi 密碼透過 `nmcli` 的命令列參數傳遞，連線的那幾秒內，本機其他使用者可以從行程列表看到
+- 網頁使用 Flask 內建的伺服器，適合單機、少量使用
+
+# 9. 運作原理 How it works
 
 ```mermaid
 flowchart LR
@@ -369,7 +530,7 @@ flowchart LR
 - **在 linear light 做 dither。** 直接在 sRGB 值域做誤差擴散，中間調會偏暗、漸層會結塊。
 - **背景快取。** 照片一天才換一次，dither 結果存成 `.bg_cache.npz`，每小時的更新只重畫文字層。
 
-# 9. 成果 Result
+# 10. 成果 Result
 
 > 實機效果：照片背景 + 天氣資訊
 >
@@ -383,7 +544,7 @@ flowchart LR
 >
 > ![refresh_demo](img/refresh_demo.gif)
 
-# 10. 注意事項 Precautions
+# 11. 注意事項 Precautions
 
 以下多數來自 Waveshare 官方說明，其中幾條是本專案實際踩過、讓一片 4 吋面板報廢的教訓：
 
@@ -396,7 +557,7 @@ flowchart LR
 7. 僅建議室內使用，避免陽光直射。
 8. 多色面板不同批次有色差屬正常現象，所以每片都要做[顏色校正](#6-顏色校正-color-calibration)。
 
-# 11. 疑難排解 Troubleshooting
+# 12. 疑難排解 Troubleshooting
 
 | 症狀                                                         | 原因                                                                  | 解法                                                                      |
 | ------------------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -409,8 +570,13 @@ flowchart LR
 | 畫面旋轉 90° 並有規則條紋                                       | 繞過 `getbuffer()` 自行打包，與面板掃描方向不符                             | 使用本專案現行版本（透過 `getbuffer()` 送資料）                                  |
 | 全白 / 全黑畫面上有固定位置的條紋                                 | 先跑 `recover.py --black`：全黑均勻 → 殘影；同位置有線 → 驅動線或膜層實體損傷  | 殘影跑 `recover.py --colours`；實體損傷無法修復，更換面板（驅動板可沿用）          |
 | 一直卡在 `e-Paper busy`                                        | SPI 未啟用或接線錯誤                                                     | 檢查 `ls /dev/spi*`、接線、SPI Select 開關                                   |
+| 手機連上熱點後沒有自動跳出設定頁                                   | 沒安裝 `captive-portal.conf`，或手機系統沒偵測到                            | 掃描面板右邊的 QR Code，或手動開啟 `http://10.42.0.1/`                        |
+| 設定頁清單裡找不到家裡的 Wi-Fi                                    | 是 5 GHz 網路（Pi 3B 只支援 2.4 GHz），或開熱點前沒掃到                     | 開啟路由器的 2.4 GHz 頻段；或展開「手動輸入名稱」                                |
+| `journalctl -u epaper-portal` 出現 `Not authorized` / `Insufficient privileges` | polkit 規則沒裝，或規則裡的帳號不是 service 的 `User`              | 檢查 `/etc/polkit-1/rules.d/50-epaper-networkmanager.rules`                   |
+| 手動執行 `portal.py` 出現 `Permission denied` 綁定 80 port           | 一般使用者不能綁 1024 以下的 port                                          | 用 service 啟動（有 `CAP_NET_BIND_SERVICE`），開發時改用 `--port 8080`           |
+| 熱點開不起來、log 出現 `nmcli` 錯誤                                 | 系統不是用 NetworkManager（舊版 Raspberry Pi OS 用 dhcpcd）                 | `sudo raspi-config` → Advanced Options → Network Config → NetworkManager      |
 
-# 12. 更換面板 Porting to another panel
+# 13. 更換面板 Porting to another panel
 
 面板相關設定只集中在 `epaper_photo.py` 開頭兩行，`dashboard.py` 與 `recover.py` 都從這裡讀取；版面的字級與座標依 `H / 400` 等比縮放。
 
@@ -429,7 +595,7 @@ W, H = 800, 480           # 4in0e -> 600, 400    | 7.3in E6 -> 800, 480
 
 各面板的色碼不同不需要處理，由 `getbuffer()` 負責。
 
-# 13. 參考資料 References
+# 14. 參考資料 References
 
 - [本專案 GitHub repo](https://github.com/crazylittleJ/epaper-weather-dashboard)
 - [Waveshare 7.3inch e-Paper HAT (E) Manual](https://www.waveshare.com/wiki/7.3inch_e-Paper_HAT_(E)_Manual)

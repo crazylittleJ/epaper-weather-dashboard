@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>ePaper 天氣看板</h1>
+
+<section>
+  <h2>目前設定</h2>
+  <dl>
+    <dt>地點</dt><dd>{{ cfg.place }}（{{ "%.4f"|format(cfg.lat) }}, {{ "%.4f"|format(cfg.lon) }}）</dd>
+    <dt>時區</dt><dd>{{ cfg.tz }}</dd>
+    <dt>Wi-Fi</dt><dd>{{ ssid or "未使用 Wi-Fi" }}</dd>
+    <dt>網址</dt><dd>http://{{ host }}</dd>
+  </dl>
+  <form method="post" action="/refresh">
+    <button class="plain">立即更新畫面</button>
+  </form>
+  {% if pending %}<p class="hint">已排入更新，正在等待面板的最短刷新間隔（3 分鐘）。</p>{% endif %}
+</section>
+
+<section>
+  <h2>地點</h2>
+  <form method="get" action="/" class="row">
+    <input name="q" value="{{ q }}" placeholder="搜尋城市，例如：台中" aria-label="搜尋城市">
+    <button class="small">搜尋</button>
+  </form>
+  {% if search_error %}<p class="msg err" style="margin-top:12px">{{ search_error }}</p>{% endif %}
+  {% if results %}
+    <ul class="results">
+      {% for r in results %}
+        <li>
+          <div>{{ r.name }}<span class="hint">　{{ [r.admin1, r.country]|select|join("，") }}</span></div>
+          <form method="post" action="/location" class="row" style="margin-top:6px">
+            <input type="hidden" name="lat" value="{{ r.latitude }}">
+            <input type="hidden" name="lon" value="{{ r.longitude }}">
+            <input type="hidden" name="tz" value="{{ r.timezone or '' }}">
+            <input name="place" value="{{ r.name[:place_max] }}" maxlength="{{ place_max }}"
+                   aria-label="顯示名稱">
+            <button class="small">使用</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="hint">輸入框裡是看板上顯示的名稱，可以改短一點（最多 {{ place_max }} 字）。</p>
+  {% endif %}
+  <details>
+    <summary>手動輸入經緯度</summary>
+    <form method="post" action="/location">
+      <label>顯示名稱</label><input name="place" value="{{ cfg.place }}" maxlength="{{ place_max }}">
+      <label>緯度</label><input name="lat" value="{{ cfg.lat }}" inputmode="decimal">
+      <label>經度</label><input name="lon" value="{{ cfg.lon }}" inputmode="decimal">
+      <button>儲存</button>
+    </form>
+  </details>
+</section>
+
+<section id="photos">
+  <h2>背景照片</h2>
+  <form method="post" action="/photos" enctype="multipart/form-data">
+    <input type="file" name="photos" accept="image/jpeg,image/png,image/bmp" multiple>
+    <button>上傳</button>
+  </form>
+  <p class="hint">每天自動輪換一張；新增或刪除照片後，下一次整點更新就會套用。</p>
+  {% if photos %}
+    <div class="grid">
+      {% for p in photos %}
+        <figure>
+          <img src="{{ url_for('thumb', name=p) }}" alt="{{ p }}" loading="lazy">
+          <figcaption>{% if p == today %}<span class="tag">今天 · </span>{% endif %}{{ p }}</figcaption>
+          <form method="post" action="{{ url_for('delete_photo', name=p) }}"
+                onsubmit="return confirm('確定刪除這張照片？')">
+            <button class="plain small">刪除</button>
+          </form>
+        </figure>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="hint">還沒有照片，目前使用純色背景。</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Wi-Fi</h2>
+  <p class="hint">換了路由器或密碼時使用。看板會中斷網路並開啟設定熱點，畫面上會顯示連線方式。</p>
+  <form method="post" action="/wifi/reset"
+        onsubmit="return confirm('看板會中斷目前的網路並進入 Wi-Fi 設定模式，確定嗎？')">
+    <button class="plain">重新設定 Wi-Fi</button>
+  </form>
+</section>
+{% endblock %}

@@ -2,15 +2,16 @@
 > ### <div style="text-align: right"> <font color="#02c59b">E-Paper Photo Frame</font> </div>
 > ### <div style="text-align: right"> <font color="#ffcc00">Spectra 6 (E6) Full-Color e-Paper Weather Dashboard on Raspberry Pi 3</font></div>
 >
-> <div style="text-align: right"> Version: 1.1.0 </div>
+> <div style="text-align: right"> Version: 1.2.0 </div>
 > <div style="text-align: right"> Author: J </div>
-> <div style="text-align: right"> Date: 2026/09/29 </div>
+> <div style="text-align: right"> Date: 2026/10/09 </div>
 
 File History :
 |         Type          |                         Description                          | Name |    Date    |
 | :-------------------: | :----------------------------------------------------------: | :--: | :--------: |
 | v1.0.0 first release  | 7.3" E6 (epd7in3e) photo frame + weather dashboard + hourly update | J | 2026/09/21 |
 | v1.1.0 second release | Removed the weather icon in the top-right corner; added `--lat` / `--lon` / `--loc` arguments with input validation | J | 2026/09/29 |
+| v1.2.0 third release  | Added Wi-Fi setup mode (hotspot + QR codes + captive portal) and a settings web page; location now stored in `config.json` | J | 2026/10/09 |
 
 <div style="page-break-after: always;"></div>
 
@@ -27,12 +28,13 @@ File History :
 - [5. Usage](#5-usage)
 - [6. Color calibration](#6-color-calibration)
 - [7. Auto update with systemd](#7-auto-update-with-systemd)
-- [8. How it works](#8-how-it-works)
-- [9. Result](#9-result)
-- [10. Precautions](#10-precautions)
-- [11. Troubleshooting](#11-troubleshooting)
-- [12. Porting to another panel](#12-porting-to-another-panel)
-- [13. References](#13-references)
+- [8. Wi-Fi setup & settings page](#8-wi-fi-setup--settings-page)
+- [9. How it works](#9-how-it-works)
+- [10. Result](#10-result)
+- [11. Precautions](#11-precautions)
+- [12. Troubleshooting](#12-troubleshooting)
+- [13. Porting to another panel](#13-porting-to-another-panel)
+- [14. References](#14-references)
 
 # Test Environment
 
@@ -42,7 +44,7 @@ File History :
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero      | All installed via apt                      |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode | All installed via apt                      |
 | Font        | fonts-noto-cjk                                    | CJK font                                   |
 | Weather API | [Open-Meteo](https://open-meteo.com/)             | No API key required                        |
 
@@ -56,14 +58,18 @@ This project connects a Waveshare 7.3" Spectra 6 six-color e-Paper display to a 
 - The dashboard refreshes once when the Pi boots and connects to the network, then on the hour every hour thereafter
 - If there's no network, it skips the refresh — but if more than 20 hours pass without a refresh, it force-refreshes using cached data (the panel spec requires at least one refresh every 24 hours)
 - If the rendered content hasn't changed (aside from the timestamp), the refresh is skipped to reduce flicker and panel wear
+- With no network, the panel shows QR codes so Wi-Fi and location can be set up from a phone; afterwards a settings web page changes the location and takes photo uploads, no SSH needed (see [section 8](#8-wi-fi-setup--settings-page))
 
-Three scripts:
+Main scripts:
 
 | Script            | Purpose                                                                 |
 | ----------------- | ------------------------------------------------------------------------ |
 | `epaper_photo.py` | Image processing pipeline (gamut compression + dithering), panel setup, single-photo display, color calibration |
 | `dashboard.py`    | The weather dashboard main program: fetches weather, overlays text/icons, refreshes the panel |
 | `recover.py`      | Panel diagnostics (all-black test) and ghosting recovery (alternating black/white or six-color full refresh) |
+| `portal.py`       | Wi-Fi setup mode (hotspot, QR codes on the panel, captive portal) and the settings web page |
+| `wifi.py`         | `nmcli` wrapper: scan, hotspot on/off, join a network |
+| `config.py`       | Reads, writes, and validates `config.json` (location, time zone); shared by `dashboard.py` and `portal.py` |
 
 # 1. Hardware
 
@@ -124,12 +130,13 @@ $ ls /dev/spi*        # should show /dev/spidev0.0 /dev/spidev0.1
 
 ```shell
 $ sudo apt update
-$ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk
+$ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk \
+                 python3-flask python3-qrcode avahi-daemon
 ```
 
 **Step 3. User groups (no sudo required to run the scripts)**
 
-A regular user only needs to be in the `spi` and `gpio` groups to drive the panel. This project's scripts should **never be run with sudo** (see [11. Troubleshooting](#11-troubleshooting)).
+A regular user only needs to be in the `spi` and `gpio` groups to drive the panel. This project's scripts should **never be run with sudo** (see [12. Troubleshooting](#12-troubleshooting)).
 
 ```shell
 $ id                                  # confirm you're in spi and gpio
@@ -158,17 +165,27 @@ Directory structure:
 ├── epaper_photo.py
 ├── dashboard.py
 ├── recover.py
+├── portal.py
+├── wifi.py
+├── config.py
+├── config.json              # location and time zone, written by the settings page (appears after first setup)
+├── templates/               # settings page templates
 ├── lib -> ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib   (symlink)
 ├── bg/                      # background photos: jpg / png / bmp
 ├── systemd/
 │   ├── epaper-dash.service
-│   └── epaper-dash.timer
+│   ├── epaper-dash.timer
+│   └── epaper-portal.service
+├── polkit/
+│   └── 50-epaper-networkmanager.rules
+├── networkmanager/
+│   └── captive-portal.conf
 └── img/                     # images used in the README
 ```
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# copy the three .py files and systemd/ here
+# copy all .py files, templates/, systemd/, polkit/ and networkmanager/ here
 
 # link in Waveshare's python lib (note: it's the python/lib level, not waveshare_epd)
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
@@ -197,13 +214,26 @@ $ cp ~/Pictures/*.jpg ~/epaper/bg/
 
 | Parameter          | Default                  | Description                                                     |
 | ----------------- | ----------------------- | ------------------------------------------------------------------ |
-| `DEFAULT_LAT/LON` | `24.8138, 120.9675`     | Default weather query coordinates; override with `--lat` / `--lon` |
-| `DEFAULT_PLACE`   | `"新竹" (Hsinchu)`        | Default location name shown on screen; override with `--loc`       |
-| `TZ`              | `"Asia/Taipei"`         | Timezone                                                          |
+| `DEFAULT_LAT/LON` | from `config.json`      | Default weather query coordinates; override with `--lat` / `--lon` |
+| `DEFAULT_PLACE`   | from `config.json`      | Default location name shown on screen; override with `--loc`       |
+| `TZ`              | from `config.json`      | Timezone                                                          |
 | `SCRIM`           | `0.0`                   | Background darkening amount. 0 = photo as-is; text readability relies on a black outline |
 | `SCRIM_BANDS`     | `False`                 | Additionally darken the top and bottom UI bands                    |
 | `MIN_INTERVAL`    | `180`                   | Minimum refresh interval in seconds, required by the panel spec    |
 | `MAX_AGE`         | `20 * 3600`             | Force a refresh if this much time passes without one (panel spec requires < 24 h) |
+
+**`config.json`: location and time zone**
+
+Written by the settings page; you can also edit it by hand. If the file is missing or a value is invalid, that value falls back to `DEFAULTS` in `config.py` (Hsinchu `24.8138, 120.9675`, `Asia/Taipei`) and the dashboard keeps running.
+
+```json
+{
+  "lat": 24.8138,
+  "lon": 120.9675,
+  "place": "新竹",
+  "tz": "Asia/Taipei"
+}
+```
 
 # 5. Usage
 
@@ -223,7 +253,7 @@ $ python3 dashboard.py --help                       # full argument reference
 
 **Location arguments `--lat` / `--lon` / `--loc`**
 
-When not specified, the values default to `DEFAULT_LAT` / `DEFAULT_LON` / `DEFAULT_PLACE` in `dashboard.py` (Hsinchu). The systemd service doesn't pass these arguments, so **scheduled auto-updates always use the default coordinates** — using the arguments for a one-off lookup elsewhere doesn't affect the schedule.
+When not specified, the location comes from `config.json` (written by the settings page; Hsinchu if the file doesn't exist). The systemd service doesn't pass these arguments, so **scheduled auto-updates always use the location in `config.json`** — using the arguments for a one-off lookup elsewhere doesn't affect the schedule.
 
 Validation rules:
 
@@ -316,7 +346,7 @@ WantedBy=timers.target
 | `Persistent=true`     | Catches up on a missed run (e.g. while powered off) after boot     |
 | `RandomizedDelaySec`  | Avoids all triggers firing at exactly the same instant             |
 
-The service's `ExecStart` doesn't pass any location arguments, so scheduled updates always use the defaults defined in `dashboard.py`. To change the scheduled location, edit `DEFAULT_LAT` / `DEFAULT_LON` / `DEFAULT_PLACE` directly — don't modify the service file.
+The service's `ExecStart` doesn't pass any location arguments, so scheduled updates always use the location in `config.json`. To change the scheduled location, use the settings page (see [section 8](#8-wi-fi-setup--settings-page)) or edit `config.json` — don't modify the service file.
 
 Install and verify:
 
@@ -332,7 +362,9 @@ Each run, `dashboard.py` evaluates the following in order:
 
 ```mermaid
 flowchart TD
-    A[Timer fires] --> B{Less than 180s since last refresh?}
+    A[Timer fires] --> S{Wi-Fi setup screen showing?}
+    S -- Yes --> X[Skip]
+    S -- No --> B{Less than 180s since last refresh?}
     B -- Yes --> X[Skip]
     B -- No --> C{Network available?}
     C -- No --> D{More than 20h since last refresh?}
@@ -346,7 +378,136 @@ flowchart TD
     H -- No --> I[init → display → sleep]
 ```
 
-# 8. How it works
+# 8. Wi-Fi setup & settings page
+
+This lets someone get the frame onto their home network and set the location and photos without SSH or editing code. The flow works like a retail smart plug: when there's no network, the Pi starts its own Wi-Fi hotspot, the panel shows QR codes, and setup happens on a phone.
+
+```mermaid
+flowchart TD
+    A[Boot] --> B{Saved network up within 90 s?<br/>Wi-Fi or Ethernet}
+    B -- Yes --> N[Normal mode<br/>settings page at http://hostname.local]
+    B -- No / reset button held at boot --> S[Scan nearby Wi-Fi]
+    S --> H[Start hotspot ePaper-Setup-XXXX]
+    H --> P[Panel shows setup screen with two QR codes]
+    P --> W[Phone joins hotspot, setup page pops up<br/>pick Wi-Fi, enter password and city]
+    W --> C{Connected?}
+    C -- Yes --> G[Geocode city, write config.json]
+    G --> D[Refresh weather dashboard]
+    D --> N
+    C -- No --> H
+```
+
+**What the user does**
+
+1. Plug it in. After about 2 minutes the panel shows a "Wi-Fi 設定" (Wi-Fi setup) screen
+2. Scan the left QR code with the phone camera to join the hotspot (or join it manually with the name and password shown on screen)
+3. The phone usually opens the setup page by itself; if not, scan the right QR code or open `http://10.42.0.1/`
+4. Pick the home Wi-Fi, enter its password and a city name, and tap "連線" (Connect)
+5. Switch the phone back to the home Wi-Fi. On success the panel switches to the weather dashboard within 1–4 minutes; on failure the hotspot comes back, and after rejoining it the setup page shows what went wrong
+
+From then on, `http://<hostname>.local` (e.g. `http://epaper.local`) on the same network lets you:
+
+- Search for a city and change the location (via the Open-Meteo Geocoding API, so no coordinates needed), with a custom name for the header
+- Upload or delete background photos, and see which one is up today
+- Refresh the panel now
+- Redo Wi-Fi setup (new router or new password)
+
+> City search can't happen on the Wi-Fi setup page itself: in setup mode neither the Pi nor the phone has internet. So that page only takes a city name, and the coordinates are looked up after the Pi joins the network (first result wins). If nothing matches, the settings page asks for a new search.
+
+> Photo EXIF orientation is not applied yet, so a portrait photo straight from a phone may appear rotated on the panel.
+
+The setup screen shows a QR code for joining the hotspot on the left (`WIFI:` format, which both iOS and Android cameras can join directly), a QR code for the setup page URL in the middle, and the hotspot name, password, URL, and a "2.4 GHz only" note on the right.
+
+**Install**
+
+Requires Raspberry Pi OS Bookworm or later (NetworkManager by default).
+
+```shell
+$ cd ~/epaper
+
+# 1. let your account drive NetworkManager (change "ej" in the file to your account first)
+$ sudo cp polkit/50-epaper-networkmanager.rules /etc/polkit-1/rules.d/
+
+# 2. captive portal: answer every DNS query on the hotspot with the Pi, so phones pop up the page
+$ sudo cp networkmanager/captive-portal.conf /etc/NetworkManager/dnsmasq-shared.d/
+
+# 3. hostname, which sets the settings page URL (here http://epaper.local)
+$ sudo raspi-config nonint do_hostname epaper
+
+# 4. start at boot (fix User and the paths first)
+$ sudo cp systemd/epaper-portal.service /etc/systemd/system/
+$ sudo systemctl daemon-reload
+$ sudo systemctl enable --now epaper-portal.service
+$ journalctl -u epaper-portal.service -f
+```
+
+`systemd/epaper-portal.service`
+
+```ini
+[Unit]
+Description=e-Paper Wi-Fi setup portal and settings page
+Wants=NetworkManager.service
+After=NetworkManager.service
+
+[Service]
+User=ej
+WorkingDirectory=/home/ej/epaper
+ExecStart=/usr/bin/python3 /home/ej/epaper/portal.py
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`portal.py` runs as a regular user: the polkit rule lets it drive NetworkManager, and `AmbientCapabilities` lets it bind port 80 (a captive portal has to be plain `http://` on port 80). That way the state files it writes (`.last_refresh` and friends) have the same owner as `dashboard.py`'s.
+
+**Testing**
+
+```shell
+$ python3 portal.py --preview /tmp/setup.png       # just look at the setup screen; no panel, no network
+$ python3 portal.py --port 8080 --no-panel         # work on the web pages (stop the service first)
+```
+
+To walk through the real flow, press "重新設定 Wi-Fi" (Redo Wi-Fi setup) on the settings page, or hold the reset button while booting. ⚠️ If you're connected over SSH via Wi-Fi, you'll lose the session.
+
+**Reset button (optional)**
+
+Wire a push button between BCM 26 (physical pin 37) and GND (pin 39), and hold it while booting to force setup mode. To use another pin, change `BUTTON_PIN` in `portal.py`. With no button wired nothing triggers (the internal pull-up is used), or you can set it to `None`.
+
+**`portal.py` settings and options**
+
+| Setting / option      | Default | Description                                                   |
+| --------------------- | ------- | ------------------------------------------------------------- |
+| `CONNECT_WAIT`        | `90`    | Seconds to wait for a saved network at boot. With no saved Wi-Fi at all it waits only 15 s (for Ethernet) |
+| `BUTTON_PIN`          | `26`    | BCM pin of the reset button; `None` disables it               |
+| `--setup`             |         | Start in setup mode                                           |
+| `--preview OUT.PNG`   |         | Render the setup screen to a PNG and exit                     |
+| `--port`              | `80`    | Web server port                                               |
+| `--no-panel`          |         | Never refresh the panel (development)                         |
+
+**How it respects the panel rules**
+
+- Showing the setup screen is a full refresh too: it obeys the 180-second minimum interval and sleeps the panel right after
+- While setup mode is active (marked by the `.setup_mode` file), `dashboard.py` skips its scheduled runs so it doesn't paint over the setup screen. `portal.py` takes over the 24-hour rule instead, redrawing the setup screen once 20 hours pass without a refresh
+- `portal.py` and `dashboard.py` share a file lock, `.panel_lock`, so they never drive SPI at the same time
+- Several refresh requests from the settings page collapse into one
+
+**Pi 3B limitations**
+
+- **2.4 GHz only**: 5 GHz networks don't show up in the list. Dual-band routers that use the same name for both bands usually work
+- One radio: it can't scan while hosting the hotspot, so the list is what was visible **before** the hotspot started. If a network is missing, type its name by hand (this also covers hidden networks)
+- Supports WPA2-Personal (including WPA2/WPA3 mixed mode) and open networks; not enterprise networks that need a username (WPA2-Enterprise), and not hotel-style web-login networks
+
+**Security (first-version limitations)**
+
+- The hotspot password is random per device (stored in `.ap_psk`, mode 600) and is only shown on the panel, so only someone who can see the screen can join
+- The settings page has **no login**: anyone on the same LAN can change the location or upload and delete photos. Only cross-site POSTs are blocked (via the `Origin` header)
+- The Wi-Fi password is passed to `nmcli` on the command line, so other local users can see it in the process list for the few seconds the connection takes
+- The web server is Flask's built-in one, which is fine for a single device with light use
+
+# 9. How it works
 
 ```mermaid
 flowchart LR
@@ -369,7 +530,7 @@ A few key design decisions:
 - **Dithering happens in linear light.** Doing error diffusion directly in sRGB values makes midtones look darker and gradients band.
 - **Background caching.** Since the photo only changes once a day, the dithered result is cached as `.bg_cache.npz`, and hourly updates only redraw the text layer.
 
-# 9. Result
+# 10. Result
 
 > Real device: photo background + weather info
 >
@@ -383,7 +544,7 @@ A few key design decisions:
 >
 > ![refresh_demo](img/refresh_demo.gif)
 
-# 10. Precautions
+# 11. Precautions
 
 Most of these come from Waveshare's official documentation; a few are lessons learned the hard way in this project, including one that cost a 4" panel its life:
 
@@ -396,7 +557,7 @@ Most of these come from Waveshare's official documentation; a few are lessons le
 7. Indoor use only is recommended; avoid direct sunlight.
 8. Color variation between batches of multi-color panels is normal, so every panel needs its own [color calibration](#6-color-calibration).
 
-# 11. Troubleshooting
+# 12. Troubleshooting
 
 | Symptom                                                       | Cause                                                                  | Fix                                                                        |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -409,8 +570,13 @@ Most of these come from Waveshare's official documentation; a few are lessons le
 | Image is rotated 90° with regular stripes                        | Data was packed manually, bypassing `getbuffer()`, and doesn't match the panel's scan direction | Use this project's current version (sends data via `getbuffer()`)              |
 | Fixed-position stripes on an all-white / all-black frame          | Run `recover.py --black` first: uniform black → ghosting; lines in the same spot → physical damage to the driver line or film layer | Ghosting: run `recover.py --colours`; physical damage can't be fixed — replace the panel (the driver board can be reused) |
 | Stuck on `e-Paper busy`                                          | SPI not enabled, or a wiring issue                                        | Check `ls /dev/spi*`, the wiring, and the SPI Select switch                    |
+| Phone doesn't open the setup page after joining the hotspot     | `captive-portal.conf` isn't installed, or the phone didn't detect the portal | Scan the right QR code on the panel, or open `http://10.42.0.1/` by hand |
+| Home Wi-Fi missing from the list on the setup page              | It's a 5 GHz network (the Pi 3B is 2.4 GHz only), or it wasn't seen before the hotspot started | Enable the router's 2.4 GHz band, or expand "enter the name manually" |
+| `journalctl -u epaper-portal` shows `Not authorized` / `Insufficient privileges` | The polkit rule isn't installed, or its account isn't the service's `User` | Check `/etc/polkit-1/rules.d/50-epaper-networkmanager.rules` |
+| Running `portal.py` by hand fails with `Permission denied` on port 80 | Regular users can't bind ports below 1024 | Start it via the service (which has `CAP_NET_BIND_SERVICE`), or use `--port 8080` for development |
+| Hotspot never comes up, log shows `nmcli` errors                 | The system isn't using NetworkManager (older Raspberry Pi OS used dhcpcd) | `sudo raspi-config` → Advanced Options → Network Config → NetworkManager |
 
-# 12. Porting to another panel
+# 13. Porting to another panel
 
 All panel-related settings are concentrated in the first two lines of `epaper_photo.py`; `dashboard.py` and `recover.py` both read from there. Layout font sizes and coordinates scale proportionally to `H / 400`.
 
@@ -429,7 +595,7 @@ After switching panels:
 
 Differences in color codes between panels don't need any handling — `getbuffer()` takes care of that.
 
-# 13. References
+# 14. References
 
 - [This project's GitHub repo](https://github.com/crazylittleJ/epaper-weather-dashboard)
 - [Waveshare 7.3inch e-Paper HAT (E) Manual](https://www.waveshare.com/wiki/7.3inch_e-Paper_HAT_(E)_Manual)
