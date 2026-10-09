@@ -16,6 +16,7 @@ Usage: python3 dashboard.py                      # render to the panel
        python3 dashboard.py --preview /tmp/p.png  # render to a PNG instead
        python3 dashboard.py --force               # skip the refresh guards
        python3 dashboard.py --lat=25.03 --lon=121.56 --loc=台北
+       (scheduled runs read the location from config.json, written by portal.py)
        python3 dashboard.py --help                # full option list
 
 Run as your normal user, NOT with sudo: sudo does not see a --user pip install
@@ -37,21 +38,25 @@ if os.path.exists(os.path.join(HERE, 'lib')):
 
 from epaper_photo import (
     W, H, PALETTE_SRGB, PANEL_CODE, srgb_to_linear,
-    fit_crop, preprocess, dither, to_epd_image, load_driver, DRIVER,
+    fit_crop, preprocess, dither, to_epd_image, load_driver, DRIVER, panel_lock,
     I_BLACK, I_WHITE, I_YELLOW, I_RED, I_BLUE, I_GREEN,
 )
+import config
 
 # ------------------------- config -------------------------
-# 預設地點；也可用 --lat / --lon / --loc 於執行時覆寫
-DEFAULT_LAT, DEFAULT_LON, DEFAULT_PLACE = 24.8138, 120.9675, "新竹"
+# 預設地點讀自 config.json（由設定網頁 portal.py 寫入，沒有時用 config.DEFAULTS）；
+# 也可用 --lat / --lon / --loc 於執行時覆寫
+_cfg = config.load()
+DEFAULT_LAT, DEFAULT_LON, DEFAULT_PLACE = _cfg["lat"], _cfg["lon"], _cfg["place"]
 LAT, LON, PLACE = DEFAULT_LAT, DEFAULT_LON, DEFAULT_PLACE
-TZ       = "Asia/Taipei"
+TZ       = _cfg["tz"]
 
 BG_DIR    = os.path.join(HERE, "bg")           # 放當地照片，每天輪一張
 CACHE     = os.path.join(HERE, "weather.json")
 STAMP     = os.path.join(HERE, ".last_refresh")
 BG_CACHE  = os.path.join(HERE, ".bg_cache.npz")
 FRAME_SIG = os.path.join(HERE, ".frame_sig")
+SETUP_FLAG = os.path.join(HERE, ".setup_mode")  # portal.py 顯示 Wi-Fi 設定畫面時存在
 MIN_INTERVAL = 180                             # 面板規格建議最小刷新間隔（秒）
 MAX_AGE      = 20 * 3600                       # 超過這麼久沒刷就強制刷（規格要求 <24h）
 
@@ -363,47 +368,30 @@ def unchanged(sig):
 
 
 def show(idx, sig=None):
-    epd = load_driver().EPD()
-    epd.init()
-    epd.Clear()
-    epd.display(epd.getbuffer(to_epd_image(idx)))
-    epd.sleep()                      # 刷完立刻睡，長期通電會燒屏
+    with panel_lock():               # portal.py 也會刷面板，避免同時操作 SPI
+        epd = load_driver().EPD()
+        epd.init()
+        epd.Clear()
+        epd.display(epd.getbuffer(to_epd_image(idx)))
+        epd.sleep()                  # 刷完立刻睡，長期通電會燒屏
     open(STAMP, "w").close()
     if sig:
         with open(FRAME_SIG, "w") as f:
             f.write(sig)
 
 
-def _latitude(v):
-    try:
-        f = float(v)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a number: {v!r}")
-    if not -90.0 <= f <= 90.0:
-        raise argparse.ArgumentTypeError(f"latitude out of range (-90..90): {f}")
-    return f
+def _arg(check):
+    """Adapts a config.check_* validator to argparse's error convention."""
+    def conv(v):
+        try:
+            return check(v)
+        except ValueError as e:
+            raise argparse.ArgumentTypeError(str(e))
+    return conv
 
 
-def _longitude(v):
-    try:
-        f = float(v)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"not a number: {v!r}")
-    if not -180.0 <= f <= 180.0:
-        raise argparse.ArgumentTypeError(f"longitude out of range (-180..180): {f}")
-    return f
-
-
-def _place(v):
-    v = v.strip()
-    if not v:
-        raise argparse.ArgumentTypeError("location name is empty")
-    if any(ord(c) < 32 for c in v):
-        raise argparse.ArgumentTypeError("location name contains control characters")
-    if len(v) > 12:
-        raise argparse.ArgumentTypeError(
-            f"location name too long for the header ({len(v)} chars, max 12)")
-    return v
+_latitude, _longitude, _place = (_arg(config.check_lat), _arg(config.check_lon),
+                                 _arg(config.check_place))
 
 
 def parse_args(argv=None):
@@ -449,6 +437,11 @@ if __name__ == "__main__":
                 "lib (%s) at %s (symlink it: ln -s .../python/lib %s)", DRIVER,
                 os.path.join(HERE, "lib"), os.path.join(HERE, "lib"))
             sys.exit(1)
+
+    # Wi-Fi 設定畫面顯示中：別蓋掉它（portal.py 會自己負責 24h 內重刷）
+    if not preview and not force and os.path.exists(SETUP_FLAG):
+        logging.info("Wi-Fi setup screen is showing, skipping")
+        sys.exit(0)
 
     if not preview and not force and too_soon():
         logging.info("last refresh < %ds ago, skipping", MIN_INTERVAL)

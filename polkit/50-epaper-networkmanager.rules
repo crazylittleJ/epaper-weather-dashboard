@@ -1,0 +1,9 @@
+// Lets the portal (running as the user below, not root) drive NetworkManager:
+// scan, start the setup hotspot, and save the home Wi-Fi profile.
+// Install to /etc/polkit-1/rules.d/ and change "ej" to your account.
+polkit.addRule(function (action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        subject.user === "ej") {
+        return polkit.Result.YES;
+    }
+});

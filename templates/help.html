@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ "使用說明" if lang == "zh-TW" else "Help" }} · ePaper{% endblock %}
+{% block head %}
+<style>
+  main { max-width: 920px; }
+  .bar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between;
+         align-items: center; gap: 12px; padding: 10px 0; margin-bottom: 8px;
+         background: var(--bg); border-bottom: 1px solid var(--line); }
+  .bar a { color: var(--accent); text-decoration: none; }
+  .langs a { padding: 4px 10px; border-radius: 6px; }
+  .langs a.on { background: var(--accent); color: #fff; }
+  .doc { overflow-wrap: anywhere; }
+  .doc a { color: var(--accent); }
+  .doc h1 { font-size: 1.5rem; margin-top: 2em; padding-bottom: .3em;
+            border-bottom: 1px solid var(--line); }
+  .doc h3 { font-size: 1.1rem; margin-top: 1.5em; }
+  .doc img { max-width: 100%; height: auto; border-radius: 6px; }
+  .doc blockquote { margin: 1em 0; padding: 4px 16px; border-left: 4px solid var(--line);
+                    color: var(--muted); }
+  .doc table { display: block; overflow-x: auto; border-collapse: collapse; margin: 1em 0;
+               font-size: .9rem; }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 6px 10px; text-align: left;
+                     vertical-align: top; }
+  .doc th { background: var(--card); }
+  .doc code { font: .88em ui-monospace, SFMono-Regular, Menlo, monospace;
+              background: var(--card); padding: 1px 4px; border-radius: 4px; }
+  .doc pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+             padding: 12px; overflow-x: auto; }
+  .doc pre code { background: none; padding: 0; }
+  .doc .mermaid { background: #fff; border-radius: 8px; padding: 12px; overflow-x: auto; }
+</style>
+{% endblock %}
+{% block body %}
+<div class="bar">
+  <a href="/">← {{ "返回設定" if lang == "zh-TW" else "Back to settings" }}</a>
+  <span class="langs">
+    <a href="{{ url_for('help', lang='zh-TW') }}" class="{{ 'on' if lang == 'zh-TW' }}">中文</a>
+    <a href="{{ url_for('help', lang='en') }}" class="{{ 'on' if lang == 'en' }}">English</a>
+  </span>
+</div>
+<article class="doc">{{ doc|safe }}</article>
+{% if has_mermaid %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  // Flowcharts need the CDN; offline (e.g. in Wi-Fi setup mode) they stay as text.
+  if (window.mermaid) {
+    document.querySelectorAll("pre > code.language-mermaid").forEach(function (code) {
+      var div = document.createElement("div");
+      div.className = "mermaid";
+      div.textContent = code.textContent;
+      code.parentNode.replaceWith(div);
+    });
+    mermaid.initialize({ startOnLoad: false, theme: "default" });
+    mermaid.run();
+  }
+</script>
+{% endif %}
+{% endblock %}

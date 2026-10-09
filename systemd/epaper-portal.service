@@ -1,0 +1,16 @@
+[Unit]
+Description=e-Paper Wi-Fi setup portal and settings page
+Wants=NetworkManager.service
+After=NetworkManager.service
+
+[Service]
+User=ej
+WorkingDirectory=/home/ej/epaper
+ExecStart=/usr/bin/python3 /home/ej/epaper/portal.py
+# port 80 without running as root (the captive portal needs plain http://)
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

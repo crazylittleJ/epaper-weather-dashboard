@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Wi-Fi 設定{% endblock %}
+{% block body %}
+<h1>Wi-Fi 設定</h1>
+{% if s.error %}<div class="msg err">{{ s.error }}</div>{% endif %}
+<section>
+  <form method="post" action="/connect">
+    <label for="ssid">選擇家中的 Wi-Fi</label>
+    {% if s.networks %}
+      <select id="ssid" name="ssid">
+        {% for n in s.networks %}
+          <option value="{{ n.ssid }}">{{ n.ssid }}{% if n.secure %} 🔒{% endif %}（訊號 {{ n.signal }}%）</option>
+        {% endfor %}
+      </select>
+    {% else %}
+      <p class="hint">沒有掃描到任何網路，請在下方手動輸入名稱。</p>
+    {% endif %}
+    <details {% if not s.networks %}open{% endif %}>
+      <summary>清單裡沒有？手動輸入名稱（隱藏網路）</summary>
+      <input name="ssid_manual" maxlength="32" autocomplete="off" autocapitalize="off"
+             placeholder="Wi-Fi 名稱（大小寫需正確）">
+    </details>
+
+    <label for="psk">Wi-Fi 密碼</label>
+    <input id="psk" name="psk" type="password" maxlength="63" autocomplete="off" autocapitalize="off">
+    <label style="font-weight:400"><input type="checkbox"
+      onclick="document.getElementById('psk').type = this.checked ? 'text' : 'password'">顯示密碼</label>
+
+    <label for="place">地點（選填）</label>
+    <input id="place" name="place" maxlength="{{ place_max }}" placeholder="例如：新竹、台北">
+    <p class="hint">會顯示在看板左上角，並用來查詢天氣。之後也能在設定頁修改。</p>
+
+    <button>連線</button>
+    <p class="hint">這台看板只支援 2.4 GHz Wi-Fi，看不到 5 GHz 網路是正常的。</p>
+    <p class="hint"><a href="/help?lang=zh-TW#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page">使用說明 Help</a></p>
+  </form>
+</section>
+{% endblock %}

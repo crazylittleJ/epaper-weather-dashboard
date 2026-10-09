@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}ePaper 天氣看板{% endblock %}</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --card: #ffffff; --fg: #1d1d1b; --muted: #6b6b66;
+    --line: #dcdcd6; --accent: #1f4fa3; --ok-bg: #e5f2e8; --ok-fg: #1d5a2c;
+    --err-bg: #fbe7e5; --err-fg: #8a1f17;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --card: #22221f; --fg: #ecece8; --muted: #a3a39c;
+      --line: #3a3a36; --accent: #7fa7ee; --ok-bg: #1c3323; --ok-fg: #a7dcb3;
+      --err-bg: #3d1f1c; --err-fg: #f2b2ab;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 16px/1.55 system-ui, -apple-system, "Noto Sans TC", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.45rem; margin: 4px 0 16px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  input, select, button { font: inherit; width: 100%; padding: 10px 12px; border-radius: 8px;
+                          border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  input[type=checkbox] { width: auto; margin-right: 6px; }
+  button { margin-top: 16px; background: var(--accent); color: #fff; border: 0; font-weight: 600; }
+  button.plain { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.small { width: auto; margin: 0; padding: 6px 12px; font-size: .9rem; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 6px 0 0; }
+  .msg { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
+  .ok  { background: var(--ok-bg);  color: var(--ok-fg); }
+  .err { background: var(--err-bg); color: var(--err-fg); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { margin-top: 0; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); }
+  ul.results { list-style: none; padding: 0; margin: 12px 0 0; }
+  ul.results li { border-top: 1px solid var(--line); padding: 10px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
+          margin-top: 12px; }
+  .grid figure { margin: 0; }
+  .grid img { width: 100%; aspect-ratio: 5 / 3; object-fit: cover; border-radius: 6px;
+              background: var(--line); display: block; }
+  .grid figcaption { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; margin: 4px 0; }
+  .tag { color: var(--accent); font-weight: 600; }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="msg {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

@@ -12,7 +12,7 @@ Usage:  python3 epaper_photo.py photo.jpg
         python3 epaper_photo.py --calib    # show 6-colour chart, then measure it
 """
 
-import sys, os, time, logging
+import sys, os, time, logging, contextlib
 import numpy as np
 from PIL import Image, ImageFilter
 
@@ -220,6 +220,19 @@ def calib_chart():
 def load_driver():
     import importlib
     return importlib.import_module("waveshare_epd." + DRIVER)
+
+
+@contextlib.contextmanager
+def panel_lock():
+    """Exclusive lock around a panel refresh, so the hourly timer and the
+    setup portal never drive SPI at the same time. Blocks until free."""
+    import fcntl
+    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), ".panel_lock"), "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def show(idx):
