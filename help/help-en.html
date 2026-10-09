@@ -640,7 +640,7 @@ $ journalctl -u epaper-dash.service -n 50 --no-pager
     B -- No / reset button held at boot --&gt; S[Scan nearby Wi-Fi]
     S --&gt; H[Start hotspot ePaper-Setup-XXXX]
     H --&gt; P[Panel shows setup screen with two QR codes]
-    P --&gt; W[Phone joins hotspot, setup page pops up&lt;br/&gt;pick Wi-Fi, enter password and city]
+    P --&gt; W[Phone joins hotspot, setup page pops up&lt;br/&gt;pick Wi-Fi, enter password, city and PIN]
     W --&gt; C{Connected?}
     C -- Yes --&gt; G[Geocode city, write config.json]
     G --&gt; D[Refresh weather dashboard]
@@ -650,9 +650,9 @@ $ journalctl -u epaper-dash.service -n 50 --no-pager
 <p><strong>What the user does</strong></p>
 <ol>
 <li>Plug it in. After about 2 minutes the panel shows a "Wi-Fi 設定" (Wi-Fi setup) screen</li>
-<li>Scan the left QR code with the phone camera to join the hotspot (or join it manually with the name and password shown on screen)</li>
+<li>Scan the left QR code with the phone camera to join the hotspot (or join it manually with the name shown on screen). By default the setup hotspot has <strong>no password</strong></li>
 <li>The phone usually opens the setup page by itself; if not, scan the right QR code or open <code>http://10.42.0.1/</code></li>
-<li>Pick the home Wi-Fi, enter its password and a city name, and tap "連線" (Connect)</li>
+<li>Pick the home Wi-Fi, enter its password, a city name, and the 6-digit <strong>PIN</strong> shown on the panel, and tap "連線" (Connect)</li>
 <li>Switch the phone back to the home Wi-Fi. On success the panel switches to the weather dashboard within 1–4 minutes; on failure the hotspot comes back, and after rejoining it the setup page shows what went wrong</li>
 </ol>
 <p>From then on, <code>http://&lt;hostname&gt;.local</code> (e.g. <code>http://epaper.local</code>) on the same network lets you:</p>
@@ -677,7 +677,7 @@ $ python3 build_help.py
 <p>City search can't happen on the Wi-Fi setup page itself: in setup mode neither the Pi nor the phone has internet. So that page only takes a city name, and the coordinates are looked up after the Pi joins the network (first result wins). If nothing matches, the settings page asks for a new search.</p>
 <p>Photo EXIF orientation is not applied yet, so a portrait photo straight from a phone may appear rotated on the panel.</p>
 </blockquote>
-<p>The setup screen shows a QR code for joining the hotspot on the left (<code>WIFI:</code> format, which both iOS and Android cameras can join directly), a QR code for the setup page URL in the middle, and the hotspot name, password, URL, and a "2.4 GHz only" note on the right.</p>
+<p>The setup screen shows a QR code for joining the hotspot on the left (<code>WIFI:</code> format, which both iOS and Android cameras can join directly), a QR code for the setup page URL in the middle, and the hotspot name, setup PIN, URL, and a "2.4 GHz only" note on the right (plus the hotspot password when <code>AP_SECURITY = "wpa2"</code>).</p>
 <p><strong>Install</strong></p>
 <p>Requires Raspberry Pi OS Bookworm or later (NetworkManager by default).</p>
 <pre><code class="language-shell">$ cd ~/epaper
@@ -743,6 +743,16 @@ $ python3 portal.py --port 8080 --no-panel         # work on the web pages (stop
 <td>BCM pin of the reset button; <code>None</code> disables it</td>
 </tr>
 <tr>
+<td><code>AP_SECURITY</code></td>
+<td><code>"open"</code></td>
+<td>Setup hotspot security: <code>"open"</code> has no password, <code>"wpa2"</code> uses the password in <code>.ap_psk</code> (see below)</td>
+</tr>
+<tr>
+<td><code>PIN_TRIES</code> / <code>PIN_LOCKOUT</code></td>
+<td><code>5</code> / <code>300</code></td>
+<td>After 5 wrong PINs, the setup form locks for 300 s</td>
+</tr>
+<tr>
 <td><code>--setup</code></td>
 <td></td>
 <td>Start in setup mode</td>
@@ -764,6 +774,16 @@ $ python3 portal.py --port 8080 --no-panel         # work on the web pages (stop
 </tr>
 </tbody>
 </table>
+<p><strong>Why the setup hotspot has no password by default</strong></p>
+<p>On some Pi 3B units, a WPA2 hotspot started by NetworkManager makes phones report "incorrect password" every time, while an open hotspot on the same Pi works. This is a compatibility problem of the Wi-Fi chip in AP mode, not a wrong password. So the setup hotspot is open by default and protected by a <strong>PIN</strong> instead:</p>
+<ul>
+<li>Every time setup mode starts, a new 6-digit PIN is generated and shown only on the panel. The setup form won't submit without it, so a passer-by who joins the hotspot can't change anything</li>
+<li>After 5 wrong PINs the form locks for 5 minutes</li>
+<li>The hotspot only exists during setup and goes away once the home Wi-Fi is joined</li>
+<li>If WPA2 hotspots work on your Pi, set <code>AP_SECURITY</code> in <code>portal.py</code> to <code>"wpa2"</code>; the hotspot then uses the password in <code>.ap_psk</code>, and the panel shows both the password and the PIN</li>
+</ul>
+<p><strong>When the hotspot won't start</strong></p>
+<p><code>portal.py</code> retries once. If it still fails, it takes the hotspot down, leaves setup mode so NetworkManager reconnects the saved Wi-Fi by itself, and shows the error on the settings page, instead of leaving the panel pointing at a hotspot that doesn't exist.</p>
 <p><strong>How it respects the panel rules</strong></p>
 <ul>
 <li>Showing the setup screen is a full refresh too: it obeys the 180-second minimum interval and sleeps the panel right after</li>
@@ -779,7 +799,8 @@ $ python3 portal.py --port 8080 --no-panel         # work on the web pages (stop
 </ul>
 <p><strong>Security (first-version limitations)</strong></p>
 <ul>
-<li>The hotspot password is random per device (stored in <code>.ap_psk</code>, mode 600) and is only shown on the panel, so only someone who can see the screen can join</li>
+<li>The setup hotspot has <strong>no password</strong> by default: during setup (about 1–2 minutes), the home Wi-Fi password typed on the setup page travels over the air <strong>unencrypted</strong>, and someone deliberately listening nearby could capture it. The PIN stops others from changing settings, not from listening. If that matters to you, confirm WPA2 hotspots work on your Pi and switch to <code>AP_SECURITY = "wpa2"</code></li>
+<li>With <code>AP_SECURITY = "wpa2"</code>, the hotspot password is random per device (stored in <code>.ap_psk</code>, mode 600) and is only shown on the panel</li>
 <li>The settings page has <strong>no login</strong>: anyone on the same LAN can change the location or upload and delete photos. Only cross-site POSTs are blocked (via the <code>Origin</code> header)</li>
 <li>The Wi-Fi password is passed to <code>nmcli</code> on the command line, so other local users can see it in the process list for the few seconds the connection takes</li>
 <li>The web server is Flask's built-in one, which is fine for a single device with light use</li>
@@ -884,6 +905,16 @@ $ python3 portal.py --port 8080 --no-panel         # work on the web pages (stop
 <td>Phone doesn't open the setup page after joining the hotspot</td>
 <td><code>captive-portal.conf</code> isn't installed, or the phone didn't detect the portal</td>
 <td>Scan the right QR code on the panel, or open <code>http://10.42.0.1/</code> by hand</td>
+</tr>
+<tr>
+<td>Phone keeps saying "incorrect password" when joining the setup hotspot</td>
+<td>With <code>AP_SECURITY = "wpa2"</code>, some Pi 3B Wi-Fi chips can't complete the WPA2 handshake in AP mode</td>
+<td>Switch back to the default <code>AP_SECURITY = "open"</code> (see <a href="#8-wi-fi-setup--settings-page">section 8</a>)</td>
+</tr>
+<tr>
+<td>Setup page says the PIN is wrong, or too many attempts</td>
+<td>Mistyped PIN; a new PIN is generated every time setup mode starts</td>
+<td>Enter the PIN the panel shows <strong>now</strong>; after 5 misses, wait 5 minutes</td>
 </tr>
 <tr>
 <td>Home Wi-Fi missing from the list on the setup page</td>

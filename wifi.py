@@ -108,20 +108,24 @@ def mac_suffix():
         return "0000"
 
 
-def ap_up(ssid, psk):
+def ap_up(ssid, psk=None):
+    """Start the setup hotspot. psk=None -> open network (see portal.AP_SECURITY)."""
     ap_down()
+    sec = []
+    if psk:
+        # WPA2-only + PMF off: the brcmfmac AP mode is flaky with anything else
+        # (and on some Pi 3B units WPA2 still fails; phones report "wrong password")
+        sec = ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", psk,
+               "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp",
+               "wifi-sec.group", "ccmp", "wifi-sec.pmf", "disable"]
     nmcli("con", "add", "type", "wifi", "ifname", IFACE, "con-name", AP_CON,
           "autoconnect", "no", "ssid", ssid,
           "802-11-wireless.mode", "ap", "802-11-wireless.band", "bg",
           "802-11-wireless.channel", "6",
           "ipv4.method", "shared", "ipv4.addresses", f"{AP_ADDR}/24",
-          "ipv6.method", "disabled",
-          # WPA2-only + PMF off: the brcmfmac AP mode is flaky with anything else
-          "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", psk,
-          "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp",
-          "wifi-sec.group", "ccmp", "wifi-sec.pmf", "disable")
+          "ipv6.method", "disabled", *sec)
     nmcli("con", "up", AP_CON, timeout=45)
-    logging.info("hotspot %s up on %s", ssid, AP_ADDR)
+    logging.info("hotspot %s (%s) up on %s", ssid, "WPA2" if psk else "open", AP_ADDR)
 
 
 def ap_down():

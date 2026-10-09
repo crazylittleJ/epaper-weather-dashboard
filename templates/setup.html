@@ -30,6 +30,11 @@
     <input id="place" name="place" maxlength="{{ place_max }}" placeholder="例如：新竹、台北">
     <p class="hint">會顯示在看板左上角，並用來查詢天氣。之後也能在設定頁修改。</p>
 
+    <label for="pin">看板畫面上的 PIN</label>
+    <input id="pin" name="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"
+           autocomplete="one-time-code" required placeholder="6 位數字">
+    <p class="hint">顯示在看板畫面右側，用來確認是你本人在設定。</p>
+
     <button>連線</button>
     <p class="hint">這台看板只支援 2.4 GHz Wi-Fi，看不到 5 GHz 網路是正常的。</p>
     <p class="hint"><a href="/help?lang=zh-TW#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page">使用說明 Help</a></p>

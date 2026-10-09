@@ -42,6 +42,12 @@ from epaper_photo import W, H, PALETTE_SRGB, I_BLACK, I_WHITE, I_RED, I_BLUE
 # ------------------------- config -------------------------
 CONNECT_WAIT = 90          # 開機後等已存 Wi-Fi 連上的秒數，逾時就進設定模式
 BUTTON_PIN   = 26          # BCM；按鈕接 GND，開機時按住強制進設定模式。None = 沒接按鈕
+# "open"：設定熱點不設密碼（部分 Pi 3B 開 WPA2 熱點時，手機會一直顯示密碼錯誤），
+#         改用面板上的 PIN 擋住看不到面板的人
+# "wpa2"：設定熱點使用 .ap_psk 裡的密碼（面板上同時顯示密碼與 PIN）
+AP_SECURITY  = "open"
+PIN_TRIES    = 5           # PIN 連錯這麼多次就暫停 PIN_LOCKOUT 秒
+PIN_LOCKOUT  = 300
 PSK_FILE     = os.path.join(HERE, ".ap_psk")
 THUMB_DIR    = os.path.join(HERE, ".thumbs")
 PHOTO_EXT    = (".jpg", ".jpeg", ".png", ".bmp")
@@ -55,7 +61,10 @@ HELP_PAGES   = {"zh-TW": "help-zh-TW.html", "en": "help-en.html"}
 class State:
     mode = "normal"        # normal | setup | connecting
     networks = []          # scan taken before the hotspot came up
-    ap_ssid = ap_psk = None
+    ap_ssid = ap_psk = None  # ap_psk is None for an open hotspot
+    pin = None             # shown on the panel, required by the setup form
+    pin_fails = 0
+    pin_locked_until = 0.0
     target = None          # SSID being joined
     error = None           # shown on the setup page
     notice = None          # shown once on the settings page
@@ -70,6 +79,8 @@ S = State()
 def wifi_qr_payload(ssid, psk):
     def esc(v):
         return "".join("\\" + c if c in '\\;,:"' else c for c in v)
+    if not psk:
+        return f"WIFI:T:nopass;S:{esc(ssid)};;"
     return f"WIFI:T:WPA;S:{esc(ssid)};P:{esc(psk)};;"
 
 
@@ -85,7 +96,7 @@ def qr_block(data, size):
                     I_BLACK, I_WHITE).astype(np.uint8)
 
 
-def render_setup_screen(ssid, psk):
+def render_setup_screen(ssid, psk, pin):
     """Same idea as the dashboard: solid palette indices, no dithering."""
     def s(v):
         return int(round(v * H / 480))      # laid out at 800x480
@@ -110,11 +121,16 @@ def render_setup_screen(ssid, psk):
         idx[y:y + q.shape[0], x:x + q.shape[1]] = q
         t((x + q.shape[1] // 2, y + qsize + s(12)), caption, f_body, anchor="ma")
 
+    rows = [("熱點名稱", ssid, I_BLACK)]
+    if psk:
+        rows.append(("熱點密碼", psk, I_BLACK))
+    rows += [("設定頁 PIN", pin, I_BLUE), ("設定網址", url, I_BLACK)]
     x, y = s(32) + 2 * (qsize + gap) + s(10), s(100)
-    for label, value in (("熱點名稱", ssid), ("密碼", psk), ("設定網址", url)):
+    step = s(70) if len(rows) > 3 else s(78)
+    for label, value, colour in rows:
         t((x, y), label, f_small)
-        t((x, y + s(28)), value, f_body)
-        y += s(78)
+        t((x, y + s(28)), value, f_body, colour)
+        y += step
     t((x, y), "只支援 2.4 GHz Wi-Fi", f_small, I_RED)
 
     t((s(32), H - s(44)), "設定完成後，這個畫面會自動換成天氣看板", f_small)
@@ -165,7 +181,7 @@ class Panel:
             return
         try:
             if what == "setup":
-                dashboard.show(render_setup_screen(S.ap_ssid, S.ap_psk))
+                dashboard.show(render_setup_screen(S.ap_ssid, S.ap_psk, S.pin))
                 # the panel no longer shows the last dashboard frame
                 _rm(dashboard.FRAME_SIG)
             else:
@@ -231,19 +247,45 @@ def wait_online(timeout):
         time.sleep(3)
 
 
+def new_pin():
+    return f"{secrets.randbelow(10 ** 6):06d}"
+
+
+def start_hotspot():
+    """Two tries: a client link that was just torn down sometimes needs a moment."""
+    for attempt in (1, 2):
+        try:
+            wifi.ap_up(S.ap_ssid, S.ap_psk)
+            return True
+        except wifi.WifiError as e:
+            logging.error("hotspot attempt %d failed: %s", attempt, e)
+            time.sleep(5)
+    return False
+
+
+def abort_setup(why):
+    """The hotspot won't come up: step aside so NetworkManager's autoconnect
+    brings the saved network back, instead of leaving the panel pointing at a
+    hotspot that doesn't exist."""
+    logging.error("leaving Wi-Fi setup: %s", why)
+    wifi.ap_down()
+    S.notice = why
+    leave_setup()
+
+
 def enter_setup(reason):
     logging.info("entering Wi-Fi setup: %s", reason)
     S.mode = "setup"
+    S.pin, S.pin_fails, S.pin_locked_until = new_pin(), 0, 0.0
     open(dashboard.SETUP_FLAG, "w").close()
     try:
         wifi.ap_down()
         S.networks = wifi.scan()            # one radio: scan before hosting
     except wifi.WifiError as e:
         logging.warning("scan failed: %s", e)
-    try:
-        wifi.ap_up(S.ap_ssid, S.ap_psk)
-    except wifi.WifiError:
-        logging.exception("hotspot failed to start")
+    if not start_hotspot():
+        abort_setup("無法開啟設定熱點，已改回原本的 Wi-Fi。詳細原因請看 journalctl -u epaper-portal。")
+        return
     panel.request("setup")
 
 
@@ -264,9 +306,11 @@ def do_connect(ssid, psk, hidden, place):
         S.error = f"無法連上「{ssid}」。請確認密碼正確，且是 2.4 GHz 網路。（{e}）"
         try:
             S.networks = wifi.scan() or S.networks
-            wifi.ap_up(S.ap_ssid, S.ap_psk)
         except wifi.WifiError:
-            logging.exception("hotspot failed to restart")
+            pass
+        if not start_hotspot():
+            abort_setup(f"無法連上「{ssid}」，而且設定熱點也無法重新開啟，已改回原本的 Wi-Fi。")
+            return
         S.mode = "setup"
         return
     if place:
@@ -422,7 +466,14 @@ def connect():
     manual = f.get("ssid_manual", "").strip()
     ssid, psk, place = manual or f.get("ssid", ""), f.get("psk", ""), f.get("place", "").strip()
     S.error = None
-    if not 1 <= len(ssid.encode()) <= 32:
+    if time.time() < S.pin_locked_until:
+        S.error = f"PIN 錯誤次數過多，請 {PIN_LOCKOUT // 60} 分鐘後再試。"
+    elif not secrets.compare_digest(f.get("pin", "").strip().encode(), (S.pin or "").encode()):
+        S.pin_fails += 1
+        if S.pin_fails >= PIN_TRIES:
+            S.pin_fails, S.pin_locked_until = 0, time.time() + PIN_LOCKOUT
+        S.error = "PIN 不正確，請輸入看板畫面上顯示的 6 位數 PIN。"
+    elif not 1 <= len(ssid.encode()) <= 32:
         S.error = "請選擇或輸入 Wi-Fi 名稱。"
     elif psk and not 8 <= len(psk) <= 63:
         S.error = "Wi-Fi 密碼應為 8–63 個字元。"
@@ -532,8 +583,11 @@ def wifi_reset():
     threading.Thread(target=later, daemon=True).start()
     return render_template(
         "message.html", title="切換到 Wi-Fi 設定模式",
-        lines=[f"看板即將中斷目前的網路，並開啟熱點「{S.ap_ssid}」（密碼 {S.ap_psk}）。",
-               f"請用手機連上該熱點後開啟 http://{wifi.AP_ADDR}/ 。"])
+        lines=[f"看板即將中斷目前的網路，並開啟設定熱點「{S.ap_ssid}」"
+               + (f"（密碼 {S.ap_psk}）。" if S.ap_psk else "（不需要密碼）。"),
+               f"請用手機連上該熱點後開啟 http://{wifi.AP_ADDR}/ ，"
+               "並輸入看板畫面上顯示的 PIN。",
+               "如果找不到熱點，看板會在約 1 分鐘內自動連回原本的 Wi-Fi。"])
 
 
 # --------------------------- main ---------------------------
@@ -549,10 +603,10 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     S.ap_ssid = f"ePaper-Setup-{wifi.mac_suffix()}"
-    S.ap_psk = ap_psk()
+    S.ap_psk = ap_psk() if AP_SECURITY == "wpa2" else None
 
     if args.preview:
-        idx = render_setup_screen(S.ap_ssid, S.ap_psk)
+        idx = render_setup_screen(S.ap_ssid, S.ap_psk, new_pin())
         Image.fromarray(PALETTE_SRGB[idx].astype(np.uint8)).save(args.preview)
         logging.info("preview -> %s", args.preview)
         return

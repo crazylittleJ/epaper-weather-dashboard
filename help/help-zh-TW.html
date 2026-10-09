@@ -640,7 +640,7 @@ $ journalctl -u epaper-dash.service -n 50 --no-pager
     B -- 否 / 開機時按住重設鈕 --&gt; S[掃描附近 Wi-Fi]
     S --&gt; H[開熱點 ePaper-Setup-XXXX]
     H --&gt; P[面板顯示設定畫面與兩個 QR Code]
-    P --&gt; W[手機連上熱點，自動跳出設定頁&lt;br/&gt;選 Wi-Fi、輸入密碼與城市]
+    P --&gt; W[手機連上熱點，自動跳出設定頁&lt;br/&gt;選 Wi-Fi、輸入密碼、城市與 PIN]
     W --&gt; C{連線成功?}
     C -- 是 --&gt; G[查詢城市座標，寫入 config.json]
     G --&gt; D[刷新天氣看板]
@@ -650,9 +650,9 @@ $ journalctl -u epaper-dash.service -n 50 --no-pager
 <p><strong>使用者的操作步驟</strong></p>
 <ol>
 <li>插電開機。約 2 分鐘後，面板會顯示「Wi-Fi 設定」畫面</li>
-<li>用手機相機掃描左邊的 QR Code 加入熱點（或手動加入畫面上的熱點名稱與密碼）</li>
+<li>用手機相機掃描左邊的 QR Code 加入熱點（或手動加入畫面上的熱點名稱）。設定熱點預設<strong>不需要密碼</strong></li>
 <li>手機通常會自動跳出設定頁；沒有的話，掃描右邊的 QR Code，或開啟 <code>http://10.42.0.1/</code></li>
-<li>選擇家中的 Wi-Fi，輸入密碼與城市名稱，按「連線」</li>
+<li>選擇家中的 Wi-Fi，輸入密碼、城市名稱，以及看板畫面上的 6 位數 <strong>PIN</strong>，按「連線」</li>
 <li>手機切回家中的 Wi-Fi。成功的話，1–4 分鐘內面板會換成天氣看板；失敗的話熱點會重新出現，再連上一次，設定頁會顯示錯誤原因</li>
 </ol>
 <p>之後在同一個網路下開啟 <code>http://&lt;主機名稱&gt;.local</code>（例如 <code>http://epaper.local</code>），可以：</p>
@@ -677,7 +677,7 @@ $ python3 build_help.py
 <p>設定頁上的城市搜尋要等連上網路後才能進行：設定模式下 Pi 和手機都沒有網路。所以 Wi-Fi 設定頁只讓使用者輸入城市名稱，連上網路後才查詢座標（取第一筆結果）。查不到時，設定網頁會提示重新搜尋。</p>
 <p>目前不會套用照片的 EXIF 方向。用手機拍的直式照片，上傳後在面板上可能會轉向。</p>
 </blockquote>
-<p>面板設定畫面的版面：左邊是加入熱點的 QR Code（<code>WIFI:</code> 格式，iOS / Android 相機都能直接加入），中間是設定頁網址的 QR Code，右邊是熱點名稱、密碼、網址和「只支援 2.4 GHz」的提示。</p>
+<p>面板設定畫面的版面：左邊是加入熱點的 QR Code（<code>WIFI:</code> 格式，iOS / Android 相機都能直接加入），中間是設定頁網址的 QR Code，右邊是熱點名稱、設定頁 PIN、網址和「只支援 2.4 GHz」的提示（<code>AP_SECURITY = "wpa2"</code> 時會多顯示熱點密碼）。</p>
 <p><strong>安裝</strong></p>
 <p>需要 Raspberry Pi OS Bookworm 以後的版本（預設使用 NetworkManager）。</p>
 <pre><code class="language-shell">$ cd ~/epaper
@@ -743,6 +743,16 @@ $ python3 portal.py --port 8080 --no-panel         # 開發設定網頁（先停
 <td>重設按鈕的 BCM 腳位，<code>None</code> 表示不使用</td>
 </tr>
 <tr>
+<td><code>AP_SECURITY</code></td>
+<td><code>"open"</code></td>
+<td>設定熱點的加密方式：<code>"open"</code> 不設密碼，<code>"wpa2"</code> 使用 <code>.ap_psk</code> 的密碼（見下方說明）</td>
+</tr>
+<tr>
+<td><code>PIN_TRIES</code> / <code>PIN_LOCKOUT</code></td>
+<td><code>5</code> / <code>300</code></td>
+<td>PIN 連錯 5 次後暫停 300 秒</td>
+</tr>
+<tr>
 <td><code>--setup</code></td>
 <td></td>
 <td>強制以設定模式啟動</td>
@@ -764,6 +774,16 @@ $ python3 portal.py --port 8080 --no-panel         # 開發設定網頁（先停
 </tr>
 </tbody>
 </table>
+<p><strong>設定熱點為什麼預設不設密碼</strong></p>
+<p>有些 Pi 3B 用 NetworkManager 開 WPA2 熱點時，手機會一直顯示「密碼錯誤」，但同一台開不設密碼的熱點就連得上。這是 Wi-Fi 晶片在 AP 模式下的相容性問題，和密碼本身無關。所以設定熱點預設為開放網路，改用 <strong>PIN</strong> 保護：</p>
+<ul>
+<li>每次進入設定模式都會產生新的 6 位數 PIN，只顯示在面板上。設定頁必須輸入正確的 PIN 才能送出，路過的人連上熱點也改不了設定</li>
+<li>PIN 連錯 5 次會暫停 5 分鐘</li>
+<li>熱點只在設定期間開啟，連上家中 Wi-Fi 後就關閉</li>
+<li>如果你的 Pi 開 WPA2 熱點沒問題，可以把 <code>portal.py</code> 的 <code>AP_SECURITY</code> 改成 <code>"wpa2"</code>，熱點就會使用 <code>.ap_psk</code> 的密碼（面板上同時顯示密碼與 PIN）</li>
+</ul>
+<p><strong>熱點開不起來時</strong></p>
+<p><code>portal.py</code> 會重試一次。如果還是失敗，就關掉熱點、退出設定模式，讓 NetworkManager 自動連回原本存好的 Wi-Fi，並在設定網頁上顯示錯誤，不會讓面板一直顯示一個不存在的熱點。</p>
 <p><strong>和面板保護規則的配合</strong></p>
 <ul>
 <li>顯示設定畫面也是一次完整刷新，同樣遵守 180 秒最短間隔，刷完立刻 sleep</li>
@@ -779,7 +799,8 @@ $ python3 portal.py --port 8080 --no-panel         # 開發設定網頁（先停
 </ul>
 <p><strong>安全性（第一版的限制）</strong></p>
 <ul>
-<li>熱點密碼每台隨機產生（存在 <code>.ap_psk</code>，權限 600），只顯示在面板上：看得到螢幕的人才能連</li>
+<li>設定熱點預設<strong>不設密碼</strong>：設定期間（約 1–2 分鐘），使用者在設定頁輸入的家用 Wi-Fi 密碼會以<strong>未加密</strong>的方式經過空中，附近若有人刻意監聽，可能被看到。PIN 只能擋住別人改設定，擋不住監聽。在意的話，請確認你的 Pi 開 WPA2 熱點沒問題後，改用 <code>AP_SECURITY = "wpa2"</code></li>
+<li><code>AP_SECURITY = "wpa2"</code> 時，熱點密碼每台隨機產生（存在 <code>.ap_psk</code>，權限 600），只顯示在面板上</li>
 <li>設定網頁<strong>沒有登入機制</strong>：同一個區網內的任何人都能修改地點、上傳或刪除照片。只有跨站 POST 會被擋下（檢查 <code>Origin</code> header）</li>
 <li>Wi-Fi 密碼透過 <code>nmcli</code> 的命令列參數傳遞，連線的那幾秒內，本機其他使用者可以從行程列表看到</li>
 <li>網頁使用 Flask 內建的伺服器，適合單機、少量使用</li>
@@ -884,6 +905,16 @@ $ python3 portal.py --port 8080 --no-panel         # 開發設定網頁（先停
 <td>手機連上熱點後沒有自動跳出設定頁</td>
 <td>沒安裝 <code>captive-portal.conf</code>，或手機系統沒偵測到</td>
 <td>掃描面板右邊的 QR Code，或手動開啟 <code>http://10.42.0.1/</code></td>
+</tr>
+<tr>
+<td>加入設定熱點時手機一直顯示「密碼錯誤」</td>
+<td><code>AP_SECURITY = "wpa2"</code> 時，部分 Pi 3B 的 Wi-Fi 晶片在 AP 模式下無法完成 WPA2 握手</td>
+<td>改回預設的 <code>AP_SECURITY = "open"</code>（見<a href="#8-wi-fi-設定與設定網頁-wi-fi-setup--settings-page">第 8 節</a>）</td>
+</tr>
+<tr>
+<td>設定頁顯示「PIN 不正確」或「錯誤次數過多」</td>
+<td>PIN 輸入錯誤；PIN 每次進入設定模式都會換新</td>
+<td>輸入面板上<strong>目前</strong>顯示的 PIN；連錯 5 次要等 5 分鐘</td>
 </tr>
 <tr>
 <td>設定頁清單裡找不到家裡的 Wi-Fi</td>
