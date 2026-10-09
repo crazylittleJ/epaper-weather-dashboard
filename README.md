@@ -44,7 +44,7 @@ File History :
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode | All installed via apt                      |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode, python3-markdown | All installed via apt                      |
 | Font        | fonts-noto-cjk                                    | CJK font                                   |
 | Weather API | [Open-Meteo](https://open-meteo.com/)             | No API key required                        |
 
@@ -131,7 +131,7 @@ $ ls /dev/spi*        # should show /dev/spidev0.0 /dev/spidev0.1
 ```shell
 $ sudo apt update
 $ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk \
-                 python3-flask python3-qrcode avahi-daemon
+                 python3-flask python3-qrcode python3-markdown avahi-daemon
 ```
 
 **Step 3. User groups (no sudo required to run the scripts)**
@@ -185,7 +185,7 @@ Directory structure:
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# copy all .py files, templates/, systemd/, polkit/ and networkmanager/ here
+# copy all .py files, README*.md, img/, templates/, systemd/, polkit/ and networkmanager/ here
 
 # link in Waveshare's python lib (note: it's the python/lib level, not waveshare_epd)
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
@@ -411,6 +411,7 @@ From then on, `http://<hostname>.local` (e.g. `http://epaper.local`) on the same
 - Upload or delete background photos, and see which one is up today
 - Refresh the panel now
 - Redo Wi-Fi setup (new router or new password)
+- Read the help at `http://<hostname>.local/help`: this README, with a Chinese/English switch (defaults to the browser language; `?lang=zh-TW` / `?lang=en` picks one, and `/help-zh-TW` / `/help-en` work too). Flowcharts need internet to render and show as plain text offline
 
 > Settings page: current settings and location (search for a city, or enter coordinates by hand)
 >

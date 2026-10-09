@@ -44,7 +44,7 @@ File History :
 | OS          | Raspberry Pi OS                                   | Python 3.13                                |
 | e-Paper     | Waveshare 7.3inch e-Paper HAT (E)                 | E Ink Spectra 6 (E6), 800 × 480            |
 | Driver      | waveshare/e-Paper `epd7in3e`                      | `RaspberryPi_JetsonNano/python/lib`        |
-| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode | 皆由 apt 安裝                               |
+| Python libs | python3-pil, python3-numpy, spidev, gpiozero, python3-flask, python3-qrcode, python3-markdown | 皆由 apt 安裝                               |
 | Font        | fonts-noto-cjk                                    | 中文字型                                    |
 | Weather API | [Open-Meteo](https://open-meteo.com/)             | 免 API key                                 |
 
@@ -131,7 +131,7 @@ $ ls /dev/spi*        # 應看到 /dev/spidev0.0 /dev/spidev0.1
 ```shell
 $ sudo apt update
 $ sudo apt install python3-pip python3-pil python3-numpy python3-spidev python3-gpiozero fonts-noto-cjk \
-                 python3-flask python3-qrcode avahi-daemon
+                 python3-flask python3-qrcode python3-markdown avahi-daemon
 ```
 
 **Step 3. 使用者群組（不需要 sudo 執行）**
@@ -185,7 +185,7 @@ $ python3 epd_7in3e_test.py
 
 ```shell
 $ mkdir -p ~/epaper/bg && cd ~/epaper
-# 放入所有 .py、templates/、systemd/、polkit/、networkmanager/
+# 放入所有 .py、README*.md、img/、templates/、systemd/、polkit/、networkmanager/
 
 # 把 Waveshare 的 python lib 接進來（注意是 python/lib 這層，不是 waveshare_epd）
 $ ln -s ~/workspace/e-Paper/RaspberryPi_JetsonNano/python/lib ~/epaper/lib
@@ -411,6 +411,7 @@ flowchart TD
 - 上傳或刪除背景照片，並看到今天輪到哪一張
 - 立即更新畫面
 - 重新設定 Wi-Fi（換路由器或改密碼時使用）
+- 閱讀使用說明 `http://<主機名稱>.local/help`：就是這份 README，可以中英文切換（預設依瀏覽器語言，`?lang=zh-TW` / `?lang=en` 可指定；`/help-zh-TW`、`/help-en` 也能用）。流程圖需要網路才能顯示，離線時會顯示原始文字
 
 > 設定網頁：目前設定與地點（可搜尋城市，或手動輸入經緯度）
 >
