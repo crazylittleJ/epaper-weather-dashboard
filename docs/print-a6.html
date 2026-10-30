@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>A6 速查卡｜電子紙天氣相框</title>
+<style>
+:root{--ink:#204c3d;--secondary:#587465;--line:#d6e2d4}
+*{box-sizing:border-box}
+body{margin:0;background:#dfe7e2;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.toolbar{max-width:800px;margin:22px auto;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 20px;line-height:1.55}
+.toolbar p{margin:0;font-size:14px}.toolbar button{background:var(--ink);color:white;border:0;border-radius:9px;padding:11px 20px;cursor:pointer;font:inherit;white-space:nowrap}
+.sheet{position:relative;width:105mm;height:148mm;margin:25px auto 40px;background:#fdfdf8;box-shadow:0 15px 45px rgba(16,45,27,.2);overflow:hidden;padding:6mm 7.5mm 5.5mm;display:flex;flex-direction:column;border-radius:1.5mm}
+.top{display:flex;align-items:center;gap:2.3mm}
+.mark{display:flex;justify-content:center;align-items:center;width:9mm;height:9mm;flex:none;border-radius:3mm;background:#1d5b47;color:#fff;font-size:6mm;font-weight:bold}
+.brand{line-height:1.28}.brand .mini{color:#708576;letter-spacing:.2em;font-size:7pt;font-weight:850}.brand h1{font-size:14pt;line-height:1.2;letter-spacing:-.04em;margin:.5mm 0 0}
+.line{border-top:.35mm solid var(--line);margin-top:3.2mm}
+.main-title{font-size:9.5pt;color:#496756;margin:2mm 0 2mm;font-weight:800}
+.qr-section{display:grid;grid-template-columns:30mm 1fr;align-items:center;gap:2.8mm}
+.qr-box{width:30mm;height:30mm;display:grid;place-items:center;background:#fff;border:.35mm solid #dfe8dc;border-radius:2.5mm;padding:1.2mm}
+.qr-box img{width:100%;height:100%;display:block;image-rendering:auto}
+.qr-msg{font-size:8.0pt;font-weight:850;line-height:1.55;margin:0}
+.qr-msg em{font-size:7.2pt;color:#537661;display:block;font-style:normal;font-weight:600;margin-top:1.5mm}
+.section-title{font-size:9pt;font-weight:850;color:#225340;margin:2.7mm 0 1.4mm}
+.steps{display:grid;gap:1.25mm}
+.step{display:flex;align-items:flex-start;gap:1.8mm;line-height:1.26;font-size:7.45pt}
+.step .n{display:grid;place-items:center;color:white;background:#3d7b63;border-radius:50%;width:4.5mm;height:4.5mm;flex:0 0 4.5mm;font-size:7pt;font-weight:900}
+.step b{color:#234c3e}
+.addr{font-size:8.3pt;letter-spacing:-.015em;background:#e9f0e7;border-radius:2mm;padding:1.2mm 2mm;text-align:center;font-family:Arial,monospace;font-weight:750;margin-top:1mm;color:#23583f}
+.foot{border-top:.35mm solid var(--line);padding-top:1.3mm;margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:2.3mm;color:#677f70;font-size:6.8pt;line-height:1.4}
+.foot b{color:#234b3d}
+@page{size:105mm 148mm;margin:0}
+@media print{html,body{width:105mm;height:148mm;background:white}.toolbar{display:none}.sheet{margin:0;box-shadow:none;border-radius:0;page-break-after:avoid;break-after:avoid}}
+@media screen and (max-width:500px){.sheet{transform-origin:top center;max-width:105mm}.toolbar{display:block;text-align:center}.toolbar button{margin-top:12px}}
+</style>
+</head>
+<body>
+<div class="toolbar"><p>列印設定：<strong>A6 直式（105 × 148 mm）</strong>、縮放 100%、邊界無、建議彩色。掃 QR Code 可開啟公開說明網頁。</p><button onclick="window.print()">🖨 列印這張小卡</button></div>
+<main class="sheet" aria-label="A6 電子紙天氣相框使用說明小卡">
+  <header class="top"><div class="mark">☼</div><div class="brand"><div class="mini">E-PAPER FAMILY GUIDE</div><h1>電子紙天氣相框</h1></div></header>
+  <div class="line"></div>
+  <div class="main-title">需要幫忙？手機掃碼看完整操作說明</div>
+  <div class="qr-section"><div class="qr-box"><img src="assets/manual-qr.png" alt="開啟公開家人使用說明書的 QR Code" width="784" height="784"></div><p class="qr-msg">掃描左邊 QR Code<br>查看最新說明書<em>這個碼是「說明書」，不是 Wi‑Fi 配對碼喔。</em></p></div>
+  <div class="section-title">第一次連接 Wi‑Fi</div>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><span>看板出現 Wi‑Fi 設定後，<b>掃螢幕左邊</b> QR Code 加入熱點。</span></div>
+    <div class="step"><span class="n">2</span><span><b>掃螢幕中間</b> QR Code 開啟設定頁。</span></div>
+    <div class="step"><span class="n">3</span><span>選 <b>2.4 GHz Wi‑Fi</b>，輸入密碼、城市與<b>螢幕 PIN</b>。</span></div>
+    <div class="step"><span class="n">4</span><span>按「連線」，約 <b>1–4 分鐘</b>後顯示天氣。</span></div>
+  </div>
+  <div class="section-title">平常換照片、換城市</div>
+  <div class="step"><span class="n">✓</span><span>手機連上<b>同一個家中 Wi‑Fi</b>，在瀏覽器開啟：</span></div>
+  <div class="addr">http://epaper.local</div>
+  <div class="foot"><span>若無法開啟，請確認同一個網路。<br>網路設定網址：<b>10.42.0.1</b>（僅配對時）</span><span>v1.2.0</span></div>
+</main>
+</body>
+</html>

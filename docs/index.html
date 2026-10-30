@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#184e42">
+  <meta name="description" content="電子紙天氣相框家人版使用說明：從第一次設定 Wi‑Fi、掃描 QR Code，到換城市、上傳照片與解決常見問題。">
+  <meta property="og:title" content="電子紙天氣相框｜家人使用說明書">
+  <meta property="og:description" content="3 分鐘看懂電子紙天氣相框的 Wi‑Fi 設定、照片與城市修改。">
+  <title>電子紙天氣相框｜家人使用說明書</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要內容</a>
+  <header class="site-header">
+    <nav class="wrap nav" aria-label="主選單">
+      <a class="brand" href="#top" aria-label="回到首頁">
+        <span class="brand-mark" aria-hidden="true">☼</span>
+        <span>電子紙天氣相框<small>FAMILY GUIDE · v1.2.0</small></span>
+      </a>
+      <div class="navlinks">
+        <a href="#gallery">實機展示</a><a href="#setup">第一次設定</a>
+        <a href="#daily">日常操作</a>
+        <a href="#faq">常見問題</a>
+        <a class="btn nav-cta" href="print-a6.html">列印說明小卡 ↗</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow">E-PAPER WEATHER DASHBOARD</span>
+          <h1 id="hero-title">把天氣，<br><em>變成家裡的風景。</em></h1>
+          <p class="hero-subtitle">這是一份給家人看的使用說明書。不需要懂電腦，只要跟著步驟，就能連接 Wi‑Fi、換城市、更新照片，讓天氣相框開始陪伴每一天。</p>
+          <div class="hero-actions">
+            <a class="btn" href="#setup">第一次使用，從這裡開始 ↓</a>
+            <a class="btn outline" href="#daily">已經設定好，想修改內容 →</a>
+          </div>
+          <div class="hero-note"><span class="dot" aria-hidden="true"></span><span>適用本專案 v1.2.0；設定不需要輸入程式碼</span></div>
+        </div>
+        <div class="device-card" aria-label="專案原始 README 所展示的天氣相框實機照片">
+          <div class="device-frame"><img src="https://raw.githubusercontent.com/crazylittleJ/epaper-weather-dashboard/main/img/result_photo_cat.jpg" alt="專案原始 README 的實機照片：電子紙相框顯示貓咪背景及新竹天氣資訊" fetchpriority="high"></div>
+          <div class="device-bottom"><b>7.3 吋 Spectra 6 電子紙</b><span>原專案實機成果展示</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="ribbon"><div class="wrap"><strong>操作很簡單：開機 → 掃描裝置上的 QR Code → 選擇家中 Wi‑Fi → 完成！</strong><span>注意：此網頁的 QR Code 與裝置螢幕上的配對 QR Code 用途不同</span></div></div>
+
+    <section class="section wrap gallery-section" id="gallery" aria-labelledby="gallery-title">
+      <div class="eyebrow">THE REAL DEVICE · 實機展示</div>
+      <h2 id="gallery-title">從照片，到一台陪伴家人的天氣相框</h2>
+      <p class="section-intro">以下為你原本 GitHub README 中的實機成果照片；組裝完成的外觀照可另外替換到這個版位，不影響網站及 QR Code。</p>
+      <div class="showcase-grid">
+        <figure class="panel showcase-photo"><img src="https://raw.githubusercontent.com/crazylittleJ/epaper-weather-dashboard/main/img/result_photo_cat.jpg" alt="原專案實機成果：貓咪背景與天氣資訊" loading="lazy"><figcaption>實機運作畫面 · 貓咪照片背景</figcaption></figure>
+        <figure class="panel showcase-photo"><img src="https://raw.githubusercontent.com/crazylittleJ/epaper-weather-dashboard/main/img/result_photo_milkyway.jpg" alt="原專案實機成果：星空照片背景與天氣資訊" loading="lazy"><figcaption>實機運作畫面 · 星空照片背景</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="section wrap" id="setup" aria-labelledby="setup-title">
+      <div class="section-head">
+        <div><div class="eyebrow">GETTING STARTED · 01</div><h2 id="setup-title">第一次使用：連接家中 Wi‑Fi</h2><p class="section-intro">當看板還沒連上網路，開機後會出現這張畫面。</p></div>
+      </div>
+      <div class="setup-layout">
+        <figure class="panel photo-panel">
+          <img src="assets/wifi-setup-demo.jpg" alt="Wi‑Fi 設定示意圖，請掃描實際裝置螢幕：左 QR Code 加入熱點、右 QR Code 開啟設定網頁" width="1176" height="882" loading="lazy">
+          <figcaption><strong>實機照片：</strong>左邊是「加入熱點」QR Code，中間是「開啟設定頁」QR Code；右側有熱點名稱與 6 位數 PIN。<strong>圖中的 PIN 與 QR Code 只是拍照當時的範例，操作時請以你手邊實機螢幕為準。</strong></figcaption>
+        </figure>
+        <div class="checklist">
+          <article class="setup-step"><div class="step-num">1</div><div><h3>插電開機</h3><p>首次使用或沒有可連線的 Wi‑Fi 時，等待約 2 分鐘，螢幕會顯示「Wi‑Fi 設定」。</p></div></article>
+          <article class="setup-step"><div class="step-num">2</div><div><h3>掃描螢幕左邊的 QR Code</h3><p>用手機相機掃描實機左邊的 QR Code，加入 <code>ePaper-Setup-XXXX</code> 熱點。手機提示「無網際網路」時，仍請保持連線。</p></div></article>
+          <article class="setup-step"><div class="step-num">3</div><div><h3>開啟設定網頁</h3><p>通常會自動跳出；沒跳出就掃實機中間的 QR Code，或在瀏覽器輸入 <code>http://10.42.0.1/</code>。</p></div></article>
+          <article class="setup-step"><div class="step-num">4</div><div><h3>輸入家裡的網路資訊</h3><p>選擇家中的 <strong>2.4 GHz Wi‑Fi</strong>，輸入 Wi‑Fi 密碼、城市名稱，以及實機顯示的 <strong>6 位數 PIN</strong>，按「連線」。</p></div></article>
+          <article class="setup-step"><div class="step-num">5</div><div><h3>等待天氣畫面出現</h3><p>手機可切回家中 Wi‑Fi。連線成功後，約 <strong>1–4 分鐘</strong>內看板會顯示天氣與照片。</p></div></article>
+        </div>
+      </div>
+      <p class="important"><strong>請注意：</strong>照片中的 QR Code 是示意，不要掃它來設定另一台裝置；真正設定時，要掃自己的相框螢幕。6 位數 PIN 每次進入設定模式都會重新產生。相框只支援 <strong>2.4 GHz Wi‑Fi</strong>。</p>
+      <p class="notice"><strong>小提醒：</strong>設定熱點預設沒有密碼，請盡量在可信任、私密的環境完成配對。如果設定失敗，重新連上 <code>ePaper-Setup-XXXX</code> 並查看頁面提示即可。</p>
+    </section>
+
+    <section class="section wrap" id="daily" aria-labelledby="daily-title">
+      <div class="eyebrow">EVERYDAY USE · 02</div>
+      <h2 id="daily-title">平常想換照片、改城市？</h2>
+      <p class="section-intro">看板連上家中 Wi‑Fi 後，手機也連到<strong>同一個家中網路</strong>，開啟以下設定網址。</p>
+      <div class="url-panel">
+        <div><p class="url-title">裝置設定頁 · 僅在家中區域網路可使用</p><a href="http://epaper.local" title="開啟裝置區域網路設定頁">http://epaper.local ↗</a><p class="small">如果你的裝置改過主機名稱，網址也會不同。這不是公開網頁。</p></div>
+        <a class="btn light" href="http://epaper.local">開啟設定頁 ↗</a>
+      </div>
+      <div class="grid3">
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">⌖</span><h3>換城市</h3><p>搜尋想看的城市或地區，選擇結果並儲存。之後自動更新會使用新的地點。</p></article>
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">▧</span><h3>更換照片</h3><p>用手機上傳喜歡的照片、刪除舊照片，或查看今天顯示的是哪張照片。</p></article>
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">↻</span><h3>立即更新</h3><p>不想等下一次排程？在設定頁按「立即更新畫面」，等電子紙完成刷新。</p></article>
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">⌁</span><h3>重新設定 Wi‑Fi</h3><p>換路由器或變更密碼時，在設定頁選擇重新設定 Wi‑Fi，再按照第一次設定流程操作。</p></article>
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">☼</span><h3>自動顯示天氣</h3><p>看板開機連網後更新，平常約每小時整點檢查是否需要刷新。畫面沒變時可能略過更新。</p></article>
+        <article class="panel feature"><span class="feature-icon" aria-hidden="true">?</span><h3>裝置內建說明</h3><p>在家中網路也能進入 <a href="http://epaper.local/help">epaper.local/help</a> 查看較完整的原始專案說明。</p></article>
+      </div>
+      <p class="notice">提示：電子紙全畫面更新時會閃爍，約需 25 秒，屬正常現象。手機直式照片上傳後若方向不正確，可先在手機旋轉、另存後重新上傳。</p>
+    </section>
+
+    <section class="section wrap" id="faq" aria-labelledby="faq-title">
+      <div class="eyebrow">NEED HELP? · 03</div>
+      <h2 id="faq-title">常見問題</h2>
+      <div class="faq">
+        <details><summary>掃了左邊 QR Code，手機說「沒有網際網路」？</summary><div class="answer"><p>這是正常的：你正在連接相框用來設定的臨時熱點，不是家中的網際網路。請選擇「保持連線」，再掃實機中間的 QR Code，或手動輸入 <code>http://10.42.0.1/</code>。</p></div></details>
+        <details><summary>手機掃 QR Code 後沒有跳出設定頁？</summary><div class="answer"><p>先確認手機目前連接 <code>ePaper-Setup-XXXX</code>，再使用瀏覽器開啟 <code>http://10.42.0.1/</code>；不要輸入 <code>https://</code>。若仍不行，可先關閉手機行動數據自動切換功能，再試一次。</p></div></details>
+        <details><summary>找不到家裡的 Wi‑Fi？</summary><div class="answer"><p>請確認路由器有啟用 <strong>2.4 GHz</strong> 頻段。看板使用 Raspberry Pi 3，無法加入只有 5 GHz 的網路；隱藏網路可嘗試手動輸入 Wi‑Fi 名稱。</p></div></details>
+        <details><summary>PIN 輸入錯誤怎麼辦？</summary><div class="answer"><p>請輸入<strong>目前實機螢幕</strong>上的 6 位數，不要照著本頁照片中的範例輸入。連續輸入錯誤 5 次會暫時鎖定 5 分鐘。</p></div></details>
+        <details><summary>輸入 Wi‑Fi 密碼後還是沒有天氣畫面？</summary><div class="answer"><p>完成設定後先等 1–4 分鐘。如果連線失敗，裝置會重新進入配對模式；重新加入它的熱點，查看設定頁顯示的錯誤，再確認家中 Wi‑Fi 密碼與頻段。</p></div></details>
+        <details><summary><code>epaper.local</code> 打不開？</summary><div class="answer"><p>請確認手機與看板在同一個區域網路，而不是手機行動數據或訪客網路。也可以從家中路由器的裝置清單找出 Raspberry Pi 的 IP 位址，再用 <code>http://裝置IP</code> 開啟。</p></div></details>
+        <details><summary>照片或天氣沒有立刻更新，是壞掉了嗎？</summary><div class="answer"><p>看板約每小時檢查更新，而且內容與前次相同時可能跳過刷新。可以進入設定頁按「立即更新畫面」。電子紙更新時暫時閃爍是正常現象。</p></div></details>
+      </div>
+    </section>
+
+    <section class="wrap final" aria-labelledby="print-title">
+      <div><span class="eyebrow" style="color:#b7d9bf">KEEP THIS CLOSE</span><h2 id="print-title">把說明書貼在相框背面</h2><p>我們準備了 A6 大小的列印小卡，包含這份說明書的 QR Code。家人只要掃描，就能在手機上閱讀最新版本。</p><p style="margin-top:20px"><a class="btn light" href="print-a6.html">開啟 A6 列印版 ↗</a></p></div>
+      <img class="final-qr" src="assets/manual-qr.png" alt="此家人說明書 GitHub Pages 網址的 QR Code" width="784" height="784" loading="lazy">
+    </section>
+  </main>
+
+  <footer class="footer"><div class="wrap footer-content"><span>© E-Paper Weather Dashboard · 家人使用說明 · v1.2.0</span><span><a href="https://github.com/crazylittleJ/epaper-weather-dashboard">原始碼與技術 README</a> · <a href="print-a6.html">A6 小卡</a></span></div></footer>
+</body>
+</html>
